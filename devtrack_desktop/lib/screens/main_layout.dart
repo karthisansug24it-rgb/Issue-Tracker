@@ -68,7 +68,7 @@ class _MainLayoutState extends State<MainLayout> {
       const IssuesScreen(),
     ];
 
-    if (AuthState.instance.isManager || AuthState.instance.isAdmin) {
+    if (AuthState.instance.isTeamLead || AuthState.instance.isManager || AuthState.instance.isAdmin) {
       destinations.add(
         const NavigationRailDestination(
           icon: Icon(Icons.groups_outlined),
@@ -79,7 +79,7 @@ class _MainLayoutState extends State<MainLayout> {
       screens.add(const TeamsScreen());
     }
 
-    if (AuthState.instance.isAdmin) {
+    if (AuthState.instance.isManager || AuthState.instance.isAdmin) {
       destinations.add(
         const NavigationRailDestination(
           icon: Icon(Icons.people_outline),
@@ -88,7 +88,9 @@ class _MainLayoutState extends State<MainLayout> {
         ),
       );
       screens.add(const UsersScreen());
+    }
 
+    if (AuthState.instance.isAdmin) {
       destinations.add(
         const NavigationRailDestination(
           icon: Icon(Icons.shield_outlined),
@@ -102,95 +104,141 @@ class _MainLayoutState extends State<MainLayout> {
     // Safety index clamp
     final activeIndex = _selectedIndex < screens.length ? _selectedIndex : 0;
 
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 1,
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E40AF),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: const Icon(Icons.track_changes, color: Colors.white, size: 20),
-            ),
-            const SizedBox(width: 10),
-            const Text(
-              'DevTrack',
-              style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-          ],
-        ),
-        actions: [
-          // User Badge
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 700;
+        final isCompactAppBar = constraints.maxWidth < 560;
+
+        return Scaffold(
+          appBar: AppBar(
+            backgroundColor: Colors.white,
+            elevation: 1,
+            titleSpacing: isMobile ? 12 : null,
+            title: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                CircleAvatar(
-                  radius: 15,
-                  backgroundColor: _getRoleColor(user.role),
-                  child: Text(
-                    user.fullName.isNotEmpty ? user.fullName[0] : 'U',
-                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E40AF),
+                    borderRadius: BorderRadius.circular(6),
                   ),
+                  child: const Icon(Icons.track_changes, color: Colors.white, size: 20),
                 ),
                 const SizedBox(width: 8),
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(user.fullName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black87)),
-                    Text('${user.role} · ${user.department}', style: TextStyle(fontSize: 11, color: _getRoleColor(user.role))),
-                  ],
+                const Text(
+                  'DevTrack',
+                  style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 18),
                 ),
               ],
             ),
-          ),
-          const SizedBox(width: 8),
-
-          // Real Logout Button
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: OutlinedButton.icon(
-              icon: const Icon(Icons.logout, size: 16),
-              label: const Text('Sign Out'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.red.shade700,
-                side: BorderSide(color: Colors.red.shade200),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            actions: [
+              // User Badge (Responsive: Avatar only if compact, full details if wide)
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: isCompactAppBar ? 6 : 12),
+                child: isCompactAppBar
+                    ? Tooltip(
+                        message: '${user.fullName}\n${user.role} · ${user.department}',
+                        child: CircleAvatar(
+                          radius: 15,
+                          backgroundColor: _getRoleColor(user.role),
+                          child: Text(
+                            user.fullName.isNotEmpty ? user.fullName[0] : 'U',
+                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      )
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircleAvatar(
+                            radius: 15,
+                            backgroundColor: _getRoleColor(user.role),
+                            child: Text(
+                              user.fullName.isNotEmpty ? user.fullName[0] : 'U',
+                              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(user.fullName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black87)),
+                              Text('${user.role} · ${user.department}', style: TextStyle(fontSize: 11, color: _getRoleColor(user.role))),
+                            ],
+                          ),
+                        ],
+                      ),
               ),
-              onPressed: () {
-                AuthState.instance.logout();
-              },
-            ),
-          ),
-        ],
-      ),
-      body: Row(
-        children: [
-          // Role-Restricted Left Sidebar NavigationRail
-          NavigationRail(
-            selectedIndex: activeIndex,
-            onDestinationSelected: (index) => setState(() => _selectedIndex = index),
-            labelType: NavigationRailLabelType.all,
-            backgroundColor: Colors.white,
-            minWidth: 92,
-            selectedIconTheme: const IconThemeData(color: Color(0xFF1E40AF)),
-            selectedLabelTextStyle: const TextStyle(color: Color(0xFF1E40AF), fontWeight: FontWeight.bold, fontSize: 12),
-            unselectedLabelTextStyle: const TextStyle(color: Colors.black54, fontSize: 12),
-            destinations: destinations,
-          ),
-          const VerticalDivider(thickness: 1, width: 1),
 
-          // Main View Content
-          Expanded(child: screens[activeIndex]),
-        ],
-      ),
+              // Logout Button (Responsive: Icon button if compact, Outlined button if wide)
+              Padding(
+                padding: EdgeInsets.only(right: isCompactAppBar ? 8 : 16),
+                child: isCompactAppBar
+                    ? IconButton(
+                        icon: const Icon(Icons.logout, size: 20, color: Colors.red),
+                        tooltip: 'Sign Out',
+                        onPressed: () => AuthState.instance.logout(),
+                      )
+                    : OutlinedButton.icon(
+                        icon: const Icon(Icons.logout, size: 16),
+                        label: const Text('Sign Out'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red.shade700,
+                          side: BorderSide(color: Colors.red.shade200),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                        onPressed: () {
+                          AuthState.instance.logout();
+                        },
+                      ),
+              ),
+            ],
+          ),
+          body: SelectionArea(
+            child: isMobile
+                ? screens[activeIndex]
+                : Row(
+                    children: [
+                      // Role-Restricted Left Sidebar NavigationRail
+                      NavigationRail(
+                        selectedIndex: activeIndex,
+                        onDestinationSelected: (index) => setState(() => _selectedIndex = index),
+                        labelType: NavigationRailLabelType.all,
+                        backgroundColor: Colors.white,
+                        minWidth: 84,
+                        selectedIconTheme: const IconThemeData(color: Color(0xFF1E40AF)),
+                        selectedLabelTextStyle: const TextStyle(color: Color(0xFF1E40AF), fontWeight: FontWeight.bold, fontSize: 12),
+                        unselectedLabelTextStyle: const TextStyle(color: Colors.black54, fontSize: 12),
+                        destinations: destinations,
+                      ),
+                      const VerticalDivider(thickness: 1, width: 1),
+
+                      // Main View Content
+                      Expanded(child: screens[activeIndex]),
+                    ],
+                  ),
+          ),
+          bottomNavigationBar: isMobile
+              ? NavigationBar(
+                  selectedIndex: activeIndex,
+                  onDestinationSelected: (index) => setState(() => _selectedIndex = index),
+                  height: 62,
+                  elevation: 2,
+                  backgroundColor: Colors.white,
+                  destinations: destinations.map((d) {
+                    final labelText = (d.label as Text).data ?? '';
+                    return NavigationDestination(
+                      icon: d.icon,
+                      selectedIcon: d.selectedIcon,
+                      label: labelText,
+                    );
+                  }).toList(),
+                )
+              : null,
+        );
+      },
     );
   }
 
@@ -199,6 +247,7 @@ class _MainLayoutState extends State<MainLayout> {
       case 'SUPER_ADMIN': return Colors.purple;
       case 'ADMIN': return Colors.indigo;
       case 'MANAGER': return Colors.blue.shade700;
+      case 'TEAM_LEAD': return Colors.teal.shade700;
       default: return Colors.teal;
     }
   }

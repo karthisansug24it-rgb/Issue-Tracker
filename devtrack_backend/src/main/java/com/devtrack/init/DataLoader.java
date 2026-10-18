@@ -65,7 +65,41 @@ public class DataLoader implements CommandLineRunner {
             System.out.println("Super Admin verified/created: superadmin@devtrack.com / admin123");
         }
 
-        if (userRepository.count() > 1) {
+        // Always ensure Team Lead account exists
+        User leadSuresh = userRepository.findByEmail("suresh.lead@devtrack.com").orElse(null);
+        if (leadSuresh == null) {
+            leadSuresh = new User(null, "Suresh Lead", "suresh.lead@devtrack.com",
+                    passwordEncoder.encode("password123"), RoleType.TEAM_LEAD, "Engineering", "Technical Team Lead");
+            leadSuresh = userRepository.save(leadSuresh);
+            System.out.println("Team Lead verified/created: suresh.lead@devtrack.com / password123");
+        }
+
+        // Backfill managerId and teamLeadId for any existing teams
+        User managerArun = userRepository.findByEmail("arun.manager@devtrack.com").orElse(null);
+        if (managerArun != null && leadSuresh != null) {
+            for (Team t : teamRepository.findAll()) {
+                boolean modified = false;
+                if (t.getManagerId() == null) {
+                    t.setManagerId(managerArun.getId());
+                    modified = true;
+                }
+                if (t.getTeamLeadId() == null) {
+                    t.setTeamLeadId(leadSuresh.getId());
+                    modified = true;
+                }
+                if (modified) {
+                    teamRepository.save(t);
+                    if (teamMemberRepository.findByTeamIdAndUserId(t.getId(), managerArun.getId()).isEmpty()) {
+                        teamMemberRepository.save(new TeamMember(t.getId(), managerArun.getId()));
+                    }
+                    if (teamMemberRepository.findByTeamIdAndUserId(t.getId(), leadSuresh.getId()).isEmpty()) {
+                        teamMemberRepository.save(new TeamMember(t.getId(), leadSuresh.getId()));
+                    }
+                }
+            }
+        }
+
+        if (userRepository.count() > 2) {
             return; // Remainder of seed data already initialized
         }
 
@@ -78,9 +112,13 @@ public class DataLoader implements CommandLineRunner {
                 passwordEncoder.encode("admin123"), RoleType.ADMIN, "Operations", "Organization Admin");
         admin = userRepository.save(admin);
 
-        User managerArun = new User(null, "Arun Kumar", "arun.manager@devtrack.com",
-                passwordEncoder.encode("password123"), RoleType.MANAGER, "Engineering", "Engineering Lead / Manager");
+        managerArun = new User(null, "Arun Kumar", "arun.manager@devtrack.com",
+                passwordEncoder.encode("password123"), RoleType.MANAGER, "Engineering", "Engineering Manager");
         managerArun = userRepository.save(managerArun);
+
+        leadSuresh = new User(null, "Suresh Lead", "suresh.lead@devtrack.com",
+                passwordEncoder.encode("password123"), RoleType.TEAM_LEAD, "Engineering", "Technical Team Lead");
+        leadSuresh = userRepository.save(leadSuresh);
 
         User empKarthi = new User(null, "Karthi Raman", "karthi.dev@devtrack.com",
                 passwordEncoder.encode("password123"), RoleType.EMPLOYEE, "Engineering", "Frontend Developer");
@@ -99,15 +137,19 @@ public class DataLoader implements CommandLineRunner {
         Department deptQA = departmentRepository.save(new Department("Quality Assurance", "QA", "Software quality and testing"));
         Department deptOps = departmentRepository.save(new Department("Operations & Support", "OPS", "Production operations and support"));
 
-        // 3. Seed Teams
-        Team teamWeb = teamRepository.save(new Team("Web Development Team", deptEng.getId(), managerArun.getId(), "Fullstack web apps"));
-        Team teamMob = teamRepository.save(new Team("Mobile & Cloud Team", deptEng.getId(), managerArun.getId(), "Mobile app solutions"));
-        Team teamQA = teamRepository.save(new Team("Core QA Team", deptQA.getId(), testerVijay.getId(), "Regression and test automation"));
+        // 3. Seed Teams (Explicit Department + Manager + Team Lead)
+        Team teamWeb = teamRepository.save(new Team("Web Development Team", deptEng.getId(), managerArun.getId(), leadSuresh.getId(), "Fullstack web apps"));
+        Team teamMob = teamRepository.save(new Team("Mobile & Cloud Team", deptEng.getId(), managerArun.getId(), leadSuresh.getId(), "Mobile app solutions"));
+        Team teamQA = teamRepository.save(new Team("Core QA Team", deptQA.getId(), managerArun.getId(), testerVijay.getId(), "Regression and test automation"));
 
         teamMemberRepository.save(new TeamMember(teamWeb.getId(), managerArun.getId()));
+        teamMemberRepository.save(new TeamMember(teamWeb.getId(), leadSuresh.getId()));
         teamMemberRepository.save(new TeamMember(teamWeb.getId(), empKarthi.getId()));
         teamMemberRepository.save(new TeamMember(teamWeb.getId(), empPriya.getId()));
+        teamMemberRepository.save(new TeamMember(teamMob.getId(), managerArun.getId()));
+        teamMemberRepository.save(new TeamMember(teamMob.getId(), leadSuresh.getId()));
         teamMemberRepository.save(new TeamMember(teamMob.getId(), empKarthi.getId()));
+        teamMemberRepository.save(new TeamMember(teamQA.getId(), managerArun.getId()));
         teamMemberRepository.save(new TeamMember(teamQA.getId(), testerVijay.getId()));
 
         // 4. Seed Projects

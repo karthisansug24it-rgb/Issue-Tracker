@@ -43,9 +43,9 @@ spring:
 spring:
   config:
     activate:
-      on-profile: postgres
+      on-profile: "postgres | issuetracker"
   datasource:
-    url: ${DB_URL:jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:devtrack}}
+    url: ${DB_URL:jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:issuetracker}}
     driver-class-name: org.postgresql.Driver
     username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:postgres}

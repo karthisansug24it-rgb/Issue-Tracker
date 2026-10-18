@@ -46,130 +46,143 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
 
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Top Row
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final isMobile = constraints.maxWidth < 560;
+          final horizontalPadding = isMobile ? 12.0 : 24.0;
+
+          return Padding(
+            padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                // Top Row
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 12,
+                  runSpacing: 10,
                   children: [
-                    const Text('Projects', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
-                    Text('Manage project scopes, members, and issue progress', style: TextStyle(color: Colors.grey.shade600)),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Projects', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 4),
+                        Text('Manage project scopes, members, and issue progress', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                      ],
+                    ),
+                    if (canCreate)
+                      ElevatedButton.icon(
+                        onPressed: _showCreateProjectDialog,
+                        icon: const Icon(Icons.add, size: 18),
+                        label: Text(isMobile ? 'New Project' : 'New Project'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.indigo.shade700,
+                          foregroundColor: Colors.white,
+                          padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 18, vertical: 12),
+                        ),
+                      ),
                   ],
                 ),
-                if (canCreate)
-                  ElevatedButton.icon(
-                    onPressed: _showCreateProjectDialog,
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('New Project'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.indigo.shade700,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-                    ),
-                  ),
+                const SizedBox(height: 20),
+
+                // Projects Grid / List
+                Expanded(
+                  child: _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : GridView.builder(
+                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 450,
+                            mainAxisExtent: 220,
+                            crossAxisSpacing: 16,
+                            mainAxisSpacing: 16,
+                          ),
+                          itemCount: _projects.length,
+                          itemBuilder: (context, index) {
+                            final proj = _projects[index];
+                            final progress = proj.totalIssues > 0
+                                ? (proj.totalIssues - proj.openIssues) / proj.totalIssues
+                                : 0.0;
+
+                            return Card(
+                              elevation: 1,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                side: BorderSide(color: Colors.grey.shade300),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(18),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: Colors.indigo.shade50,
+                                            borderRadius: BorderRadius.circular(4),
+                                            border: Border.all(color: Colors.indigo.shade200),
+                                          ),
+                                          child: Text(
+                                            proj.projectKey,
+                                            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo.shade900),
+                                          ),
+                                        ),
+                                        Chip(
+                                          label: Text(proj.status, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                          backgroundColor: Colors.green.shade50,
+                                          side: BorderSide(color: Colors.green.shade200),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      proj.name,
+                                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Expanded(
+                                      child: Text(
+                                        proj.description,
+                                        style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Wrap(
+                                      alignment: WrapAlignment.spaceBetween,
+                                      crossAxisAlignment: WrapCrossAlignment.center,
+                                      spacing: 8,
+                                      runSpacing: 4,
+                                      children: [
+                                        Text('Manager: ${proj.ownerName}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                                        Text('${proj.openIssues} open / ${proj.totalIssues} total', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    LinearProgressIndicator(
+                                      value: progress,
+                                      backgroundColor: Colors.grey.shade200,
+                                      color: Colors.indigo.shade600,
+                                      minHeight: 6,
+                                      borderRadius: BorderRadius.circular(3),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
               ],
             ),
-            const SizedBox(height: 24),
-
-            // Projects Grid / List
-            Expanded(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : GridView.builder(
-                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: 450,
-                        mainAxisExtent: 220,
-                        crossAxisSpacing: 16,
-                        mainAxisSpacing: 16,
-                      ),
-                      itemCount: _projects.length,
-                      itemBuilder: (context, index) {
-                        final proj = _projects[index];
-                        final progress = proj.totalIssues > 0
-                            ? (proj.totalIssues - proj.openIssues) / proj.totalIssues
-                            : 0.0;
-
-                        return Card(
-                          elevation: 1,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            side: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(18),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: Colors.indigo.shade50,
-                                        borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(color: Colors.indigo.shade200),
-                                      ),
-                                      child: Text(
-                                        proj.projectKey,
-                                        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo.shade900),
-                                      ),
-                                    ),
-                                    Chip(
-                                      label: Text(proj.status, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                                      backgroundColor: Colors.green.shade50,
-                                      side: BorderSide(color: Colors.green.shade200),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  proj.name,
-                                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 6),
-                                Expanded(
-                                  child: Text(
-                                    proj.description,
-                                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text('Manager: ${proj.ownerName}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-                                    Text('${proj.openIssues} open / ${proj.totalIssues} total', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                LinearProgressIndicator(
-                                  value: progress,
-                                  backgroundColor: Colors.grey.shade200,
-                                  color: Colors.indigo.shade600,
-                                  minHeight: 6,
-                                  borderRadius: BorderRadius.circular(3),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -184,34 +197,36 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       builder: (context) {
         return AlertDialog(
           title: const Text('Create New Project'),
-          content: SizedBox(
-            width: 450,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Project Key (e.g. CRM, MOB)', style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 6),
-                TextField(
-                  decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
-                  onChanged: (v) => key = v,
-                ),
-                const SizedBox(height: 14),
-                const Text('Project Name', style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 6),
-                TextField(
-                  decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
-                  onChanged: (v) => name = v,
-                ),
-                const SizedBox(height: 14),
-                const Text('Description', style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 6),
-                TextField(
-                  maxLines: 3,
-                  decoration: const InputDecoration(border: OutlineInputBorder()),
-                  onChanged: (v) => desc = v,
-                ),
-              ],
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 450),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Project Key (e.g. CRM, MOB)', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  TextField(
+                    decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
+                    onChanged: (v) => key = v,
+                  ),
+                  const SizedBox(height: 14),
+                  const Text('Project Name', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  TextField(
+                    decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
+                    onChanged: (v) => name = v,
+                  ),
+                  const SizedBox(height: 14),
+                  const Text('Description', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  TextField(
+                    maxLines: 3,
+                    decoration: const InputDecoration(border: OutlineInputBorder()),
+                    onChanged: (v) => desc = v,
+                  ),
+                ],
+              ),
             ),
           ),
           actions: [

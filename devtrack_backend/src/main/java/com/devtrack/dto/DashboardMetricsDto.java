@@ -1,11 +1,13 @@
 package com.devtrack.dto;
 
+import java.util.List;
 import java.util.Map;
 
 public class DashboardMetricsDto {
     private String role;
     private long totalUsers;
     private long totalProjects;
+    private long totalTeams;
     private long totalIssues;
     private long openIssues;
     private long inProgressIssues;
@@ -19,6 +21,7 @@ public class DashboardMetricsDto {
     private long myTasks;
     private Map<String, Long> statusDistribution;
     private Map<String, Long> priorityDistribution;
+    private List<Map<String, Object>> myTeams;
 
     public DashboardMetricsDto() {}
 
@@ -66,6 +69,12 @@ public class DashboardMetricsDto {
 
     public Map<String, Long> getStatusDistribution() { return statusDistribution; }
     public void setStatusDistribution(Map<String, Long> statusDistribution) { this.statusDistribution = statusDistribution; }
+
+    public long getTotalTeams() { return totalTeams; }
+    public void setTotalTeams(long totalTeams) { this.totalTeams = totalTeams; }
+
+    public List<Map<String, Object>> getMyTeams() { return myTeams; }
+    public void setMyTeams(List<Map<String, Object>> myTeams) { this.myTeams = myTeams; }
 
     public Map<String, Long> getPriorityDistribution() { return priorityDistribution; }
     public void setPriorityDistribution(Map<String, Long> priorityDistribution) { this.priorityDistribution = priorityDistribution; }

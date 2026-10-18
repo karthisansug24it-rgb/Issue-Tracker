@@ -48,6 +48,22 @@ public class OrganizationService {
         return DepartmentDto.fromEntity(saved);
     }
 
+    @Transactional
+    public DepartmentDto updateDepartment(Long id, Department update) {
+        Department dept = departmentRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Department not found with id: " + id));
+        if (update.getName() != null && !update.getName().isBlank()) dept.setName(update.getName().trim());
+        if (update.getCode() != null && !update.getCode().isBlank()) dept.setCode(update.getCode().trim().toUpperCase());
+        if (update.getDescription() != null) dept.setDescription(update.getDescription());
+        dept.setActive(update.isActive());
+        return DepartmentDto.fromEntity(departmentRepository.save(dept));
+    }
+
+    @Transactional
+    public void deleteDepartment(Long id) {
+        departmentRepository.deleteById(id);
+    }
+
     // Teams
     public List<TeamDto> getAllTeams() {
         return teamRepository.findAll().stream()
@@ -55,9 +71,53 @@ public class OrganizationService {
                 .collect(Collectors.toList());
     }
 
+    public List<TeamDto> getTeamsByDepartment(Long departmentId) {
+        return teamRepository.findByDepartmentId(departmentId).stream()
+                .map(this::mapToTeamDto)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
     public TeamDto createTeam(Team team) {
         Team saved = teamRepository.save(team);
+        // Ensure assigned Manager is registered in team members
+        if (saved.getManagerId() != null) {
+            addMemberToTeam(saved.getId(), saved.getManagerId());
+        }
+        // Ensure assigned Team Lead is registered in team members
+        if (saved.getTeamLeadId() != null) {
+            addMemberToTeam(saved.getId(), saved.getTeamLeadId());
+        }
         return mapToTeamDto(saved);
+    }
+
+    @Transactional
+    public TeamDto updateTeam(Long id, Team update) {
+        Team team = teamRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Team not found with id: " + id));
+        if (update.getName() != null && !update.getName().isBlank()) team.setName(update.getName().trim());
+        if (update.getDescription() != null) team.setDescription(update.getDescription());
+        if (update.getDepartmentId() != null) team.setDepartmentId(update.getDepartmentId());
+        team.setManagerId(update.getManagerId());
+        team.setTeamLeadId(update.getTeamLeadId());
+        team.setActive(update.isActive());
+
+        // Automatically ensure both manager and team lead are members of the team
+        if (update.getManagerId() != null) {
+            addMemberToTeam(id, update.getManagerId());
+        }
+        if (update.getTeamLeadId() != null) {
+            addMemberToTeam(id, update.getTeamLeadId());
+        }
+
+        Team saved = teamRepository.save(team);
+        return mapToTeamDto(saved);
+    }
+
+    @Transactional
+    public void deleteTeam(Long id) {
+        teamMemberRepository.deleteByTeamId(id);
+        teamRepository.deleteById(id);
     }
 
     @Transactional
@@ -85,10 +145,22 @@ public class OrganizationService {
                     .ifPresent(d -> dto.setDepartmentName(d.getName()));
         }
 
+        if (team.getManagerId() != null) {
+            dto.setManagerId(team.getManagerId());
+            userRepository.findById(team.getManagerId())
+                    .ifPresent(u -> {
+                        dto.setManagerName(u.getFullName());
+                        dto.setManagerEmail(u.getEmail());
+                    });
+        }
+
         if (team.getTeamLeadId() != null) {
             dto.setTeamLeadId(team.getTeamLeadId());
             userRepository.findById(team.getTeamLeadId())
-                    .ifPresent(u -> dto.setTeamLeadName(u.getFullName()));
+                    .ifPresent(u -> {
+                        dto.setTeamLeadName(u.getFullName());
+                        dto.setTeamLeadEmail(u.getEmail());
+                    });
         }
 
         List<UserDto> members = teamMemberRepository.findByTeamId(team.getId()).stream()

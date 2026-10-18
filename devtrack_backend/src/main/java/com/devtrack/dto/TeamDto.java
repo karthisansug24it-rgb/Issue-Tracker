@@ -7,8 +7,12 @@ public class TeamDto {
     private String name;
     private Long departmentId;
     private String departmentName;
+    private Long managerId;
+    private String managerName;
+    private String managerEmail;
     private Long teamLeadId;
     private String teamLeadName;
+    private String teamLeadEmail;
     private String description;
     private boolean active;
     private List<UserDto> members;
@@ -27,11 +31,23 @@ public class TeamDto {
     public String getDepartmentName() { return departmentName; }
     public void setDepartmentName(String departmentName) { this.departmentName = departmentName; }
 
+    public Long getManagerId() { return managerId; }
+    public void setManagerId(Long managerId) { this.managerId = managerId; }
+
+    public String getManagerName() { return managerName; }
+    public void setManagerName(String managerName) { this.managerName = managerName; }
+
+    public String getManagerEmail() { return managerEmail; }
+    public void setManagerEmail(String managerEmail) { this.managerEmail = managerEmail; }
+
     public Long getTeamLeadId() { return teamLeadId; }
     public void setTeamLeadId(Long teamLeadId) { this.teamLeadId = teamLeadId; }
 
     public String getTeamLeadName() { return teamLeadName; }
     public void setTeamLeadName(String teamLeadName) { this.teamLeadName = teamLeadName; }
+
+    public String getTeamLeadEmail() { return teamLeadEmail; }
+    public void setTeamLeadEmail(String teamLeadEmail) { this.teamLeadEmail = teamLeadEmail; }
 
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }

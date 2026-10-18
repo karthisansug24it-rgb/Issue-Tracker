@@ -20,13 +20,22 @@ public class DashboardService {
     private final UserRepository userRepository;
     private final ProjectRepository projectRepository;
     private final IssueRepository issueRepository;
+    private final TeamRepository teamRepository;
+    private final TeamMemberRepository teamMemberRepository;
+    private final DepartmentRepository departmentRepository;
 
     public DashboardService(UserRepository userRepository,
                             ProjectRepository projectRepository,
-                            IssueRepository issueRepository) {
+                            IssueRepository issueRepository,
+                            TeamRepository teamRepository,
+                            TeamMemberRepository teamMemberRepository,
+                            DepartmentRepository departmentRepository) {
         this.userRepository = userRepository;
         this.projectRepository = projectRepository;
         this.issueRepository = issueRepository;
+        this.teamRepository = teamRepository;
+        this.teamMemberRepository = teamMemberRepository;
+        this.departmentRepository = departmentRepository;
     }
 
     public DashboardMetricsDto getMetrics(User user) {
@@ -54,6 +63,8 @@ public class DashboardService {
         dto.setMyBugs(myAssigned.stream().filter(i -> i.getType() == IssueType.BUG && i.getStatus() != IssueStatus.CLOSED).count());
         dto.setMyTasks(myAssigned.stream().filter(i -> i.getType() == IssueType.TASK && i.getStatus() != IssueStatus.CLOSED).count());
 
+        dto.setTotalTeams(teamRepository.count());
+
         Map<String, Long> statusDist = new HashMap<>();
         for (IssueStatus s : IssueStatus.values()) {
             statusDist.put(s.name(), issueRepository.countByStatus(s));
@@ -65,6 +76,55 @@ public class DashboardService {
             priorityDist.put(p.name(), issueRepository.countByPriority(p));
         }
         dto.setPriorityDistribution(priorityDist);
+
+        // Teams & Works assignment overview
+        List<com.devtrack.model.Team> allTeams = teamRepository.findAll();
+        List<Map<String, Object>> teamSummaries = new java.util.ArrayList<>();
+
+        for (com.devtrack.model.Team t : allTeams) {
+            boolean isManager = user.getId().equals(t.getManagerId());
+            boolean isLead = user.getId().equals(t.getTeamLeadId());
+            boolean isMember = teamMemberRepository.findByTeamIdAndUserId(t.getId(), user.getId()).isPresent();
+
+            // Include if user is assigned to the team OR if user is Super Admin / Admin
+            if (isManager || isLead || isMember || user.getRole() == com.devtrack.model.RoleType.SUPER_ADMIN || user.getRole() == com.devtrack.model.RoleType.ADMIN) {
+                Map<String, Object> summary = new HashMap<>();
+                summary.put("id", t.getId());
+                summary.put("name", t.getName());
+                summary.put("description", t.getDescription());
+                summary.put("active", t.isActive());
+
+                if (t.getDepartmentId() != null) {
+                    departmentRepository.findById(t.getDepartmentId())
+                            .ifPresent(d -> summary.put("departmentName", d.getName()));
+                }
+
+                if (t.getManagerId() != null) {
+                    summary.put("managerId", t.getManagerId());
+                    userRepository.findById(t.getManagerId())
+                            .ifPresent(u -> summary.put("managerName", u.getFullName()));
+                }
+
+                if (t.getTeamLeadId() != null) {
+                    summary.put("teamLeadId", t.getTeamLeadId());
+                    userRepository.findById(t.getTeamLeadId())
+                            .ifPresent(u -> summary.put("teamLeadName", u.getFullName()));
+                }
+
+                long memberCount = teamMemberRepository.findByTeamId(t.getId()).size();
+                summary.put("memberCount", memberCount);
+
+                String roleInTeam = "Observer";
+                if (isManager) roleInTeam = "Team Manager";
+                else if (isLead) roleInTeam = "Team Lead";
+                else if (isMember) roleInTeam = "Member";
+                else if (user.getRole() == com.devtrack.model.RoleType.SUPER_ADMIN || user.getRole() == com.devtrack.model.RoleType.ADMIN) roleInTeam = "Admin Oversight";
+                summary.put("userRoleInTeam", roleInTeam);
+
+                teamSummaries.add(summary);
+            }
+        }
+        dto.setMyTeams(teamSummaries);
 
         return dto;
     }

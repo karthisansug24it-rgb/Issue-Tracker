@@ -4,5 +4,6 @@ public enum RoleType {
     SUPER_ADMIN,
     ADMIN,
     MANAGER,
+    TEAM_LEAD,
     EMPLOYEE
 }

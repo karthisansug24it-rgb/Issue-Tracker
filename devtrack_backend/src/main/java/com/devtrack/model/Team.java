@@ -15,6 +15,7 @@ public class Team {
     private String name;
 
     private Long departmentId;
+    private Long managerId;
     private Long teamLeadId;
     private String description;
     private boolean active = true;
@@ -25,6 +26,15 @@ public class Team {
     public Team(String name, Long departmentId, Long teamLeadId, String description) {
         this.name = name;
         this.departmentId = departmentId;
+        this.teamLeadId = teamLeadId;
+        this.description = description;
+        this.active = true;
+    }
+
+    public Team(String name, Long departmentId, Long managerId, Long teamLeadId, String description) {
+        this.name = name;
+        this.departmentId = departmentId;
+        this.managerId = managerId;
         this.teamLeadId = teamLeadId;
         this.description = description;
         this.active = true;
@@ -43,6 +53,9 @@ public class Team {
 
     public Long getDepartmentId() { return departmentId; }
     public void setDepartmentId(Long departmentId) { this.departmentId = departmentId; }
+
+    public Long getManagerId() { return managerId; }
+    public void setManagerId(Long managerId) { this.managerId = managerId; }
 
     public Long getTeamLeadId() { return teamLeadId; }
     public void setTeamLeadId(Long teamLeadId) { this.teamLeadId = teamLeadId; }

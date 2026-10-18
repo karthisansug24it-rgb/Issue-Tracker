@@ -1,10 +1,19 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'services/auth_state.dart';
 import 'screens/main_layout.dart';
 import 'screens/login_screen.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (kIsWeb) {
+    try {
+      // Disables browser's default canvas context menu so Flutter's native
+      // Copy, Paste, Cut, Select All toolbars and right-click actions work seamlessly
+      await BrowserContextMenu.disableContextMenu();
+    } catch (_) {}
+  }
   runApp(const DevTrackApp());
 }
 
@@ -49,10 +58,22 @@ class _DevTrackAppState extends State<DevTrackApp> {
           color: Colors.white,
           elevation: 1,
         ),
+        textSelectionTheme: const TextSelectionThemeData(
+          cursorColor: Color(0xFF1E40AF),
+          selectionColor: Color(0xFFBFDBFE),
+          selectionHandleColor: Color(0xFF1E40AF),
+        ),
       ),
-      home: AuthState.instance.isLoggedIn
-          ? const MainLayout()
-          : const LoginScreen(),
+      home: AuthState.instance.isInitializing
+          ? const Scaffold(
+              backgroundColor: Color(0xFFF8FAFC),
+              body: Center(
+                child: CircularProgressIndicator(color: Color(0xFF1E40AF)),
+              ),
+            )
+          : (AuthState.instance.isLoggedIn
+              ? const MainLayout()
+              : const LoginScreen()),
     );
   }
 }

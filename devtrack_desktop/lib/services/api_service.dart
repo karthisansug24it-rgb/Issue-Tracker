@@ -6,6 +6,8 @@ import '../models/comment_model.dart';
 import '../models/audit_log_model.dart';
 import '../models/dashboard_metrics_model.dart';
 import '../models/user_model.dart';
+import '../models/department_model.dart';
+import '../models/team_model.dart';
 import 'auth_state.dart';
 
 class ApiService {
@@ -253,6 +255,7 @@ class ApiService {
       final List data = jsonDecode(response.body);
       return data.map((e) => UserModel.fromJson(e)).toList();
     }
+    return [];
   }
 
   Future<UserModel> updateUserRole(int userId, String newRole) async {
@@ -287,22 +290,184 @@ class ApiService {
     return [];
   }
 
-  // 9. Departments and Teams
-  Future<List<dynamic>> getDepartments() async {
+  // 9. Departments Management
+  Future<List<DepartmentModel>> getDepartments() async {
     final url = Uri.parse('$baseUrl/departments');
     final response = await http.get(url, headers: _headers());
     if (response.statusCode == 200) {
-      return jsonDecode(response.body);
+      final List data = jsonDecode(response.body);
+      return data.map((e) => DepartmentModel.fromJson(e)).toList();
     }
     return [];
   }
 
-  Future<List<dynamic>> getTeams() async {
-    final url = Uri.parse('$baseUrl/teams');
+  Future<DepartmentModel> createDepartment({
+    required String name,
+    required String code,
+    String? description,
+  }) async {
+    final url = Uri.parse('$baseUrl/departments');
+    final response = await http.post(
+      url,
+      headers: _headers(),
+      body: jsonEncode({
+        'name': name.trim(),
+        'code': code.trim().toUpperCase(),
+        'description': description?.trim(),
+        'active': true,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      return DepartmentModel.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('Failed to create department: ${response.body}');
+  }
+
+  Future<DepartmentModel> updateDepartment(
+    int id, {
+    required String name,
+    required String code,
+    String? description,
+    bool active = true,
+  }) async {
+    final url = Uri.parse('$baseUrl/departments/$id');
+    final response = await http.put(
+      url,
+      headers: _headers(),
+      body: jsonEncode({
+        'name': name.trim(),
+        'code': code.trim().toUpperCase(),
+        'description': description?.trim(),
+        'active': active,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      return DepartmentModel.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('Failed to update department: ${response.body}');
+  }
+
+  Future<void> deleteDepartment(int id) async {
+    final url = Uri.parse('$baseUrl/departments/$id');
+    final response = await http.delete(url, headers: _headers());
+    if (response.statusCode != 200) {
+      throw Exception('Failed to delete department: ${response.body}');
+    }
+  }
+
+  Future<UserModel> getCurrentUser() async {
+    final url = Uri.parse('$baseUrl/auth/me');
     final response = await http.get(url, headers: _headers());
     if (response.statusCode == 200) {
-      return jsonDecode(response.body);
+      return UserModel.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('Failed to get current user: ${response.statusCode}');
+  }
+
+  Future<void> logout() async {
+    try {
+      final url = Uri.parse('$baseUrl/auth/logout');
+      await http.post(url, headers: _headers());
+    } catch (_) {}
+  }
+
+  // 10. Teams & Groups Management
+  Future<List<TeamModel>> getTeams({int? departmentId}) async {
+    final queryParams = <String, String>{};
+    if (departmentId != null) queryParams['departmentId'] = departmentId.toString();
+
+    final url = Uri.parse('$baseUrl/teams').replace(queryParameters: queryParams.isNotEmpty ? queryParams : null);
+    final response = await http.get(url, headers: _headers());
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((e) => TeamModel.fromJson(e)).toList();
     }
     return [];
+  }
+
+  Future<TeamModel> createTeam({
+    required String name,
+    required int departmentId,
+    String? description,
+    int? managerId,
+    int? teamLeadId,
+  }) async {
+    final url = Uri.parse('$baseUrl/teams');
+    final response = await http.post(
+      url,
+      headers: _headers(),
+      body: jsonEncode({
+        'name': name.trim(),
+        'departmentId': departmentId,
+        'managerId': managerId,
+        'teamLeadId': teamLeadId,
+        'description': description?.trim(),
+        'active': true,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      return TeamModel.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('Failed to create team: ${response.body}');
+  }
+
+  Future<TeamModel> updateTeam(
+    int id, {
+    required String name,
+    required int departmentId,
+    String? description,
+    int? managerId,
+    int? teamLeadId,
+    bool active = true,
+  }) async {
+    final url = Uri.parse('$baseUrl/teams/$id');
+    final response = await http.put(
+      url,
+      headers: _headers(),
+      body: jsonEncode({
+        'name': name.trim(),
+        'departmentId': departmentId,
+        'managerId': managerId,
+        'teamLeadId': teamLeadId,
+        'description': description?.trim(),
+        'active': active,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      return TeamModel.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('Failed to update team: ${response.body}');
+  }
+
+  Future<void> deleteTeam(int id) async {
+    final url = Uri.parse('$baseUrl/teams/$id');
+    final response = await http.delete(url, headers: _headers());
+    if (response.statusCode != 200) {
+      throw Exception('Failed to delete team: ${response.body}');
+    }
+  }
+
+  Future<void> addTeamMember(int teamId, int userId) async {
+    final url = Uri.parse('$baseUrl/teams/$teamId/members');
+    final response = await http.post(
+      url,
+      headers: _headers(),
+      body: jsonEncode({'userId': userId}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to add team member: ${response.body}');
+    }
+  }
+
+  Future<void> removeTeamMember(int teamId, int userId) async {
+    final url = Uri.parse('$baseUrl/teams/$teamId/members/$userId');
+    final response = await http.delete(url, headers: _headers());
+    if (response.statusCode != 200) {
+      throw Exception('Failed to remove team member: ${response.body}');
+    }
   }
 }

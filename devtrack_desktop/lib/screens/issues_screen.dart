@@ -4,6 +4,7 @@ import '../models/project_model.dart';
 import '../models/user_model.dart';
 import '../services/api_service.dart';
 import '../services/auth_state.dart';
+import '../utils/clipboard_helper.dart';
 
 class IssuesScreen extends StatefulWidget {
   const IssuesScreen({super.key});
@@ -69,202 +70,323 @@ class _IssuesScreenState extends State<IssuesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Top Action Row
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final isCompact = constraints.maxWidth < 820;
+          final isMobile = constraints.maxWidth < 560;
+          final horizontalPadding = isMobile ? 12.0 : (isCompact ? 16.0 : 24.0);
+
+          return Padding(
+            padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                // Top Action Row
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 12,
+                  runSpacing: 10,
                   children: [
-                    const Text('Issues & Work Items', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
-                    Text('Track bugs, features, and tasks across all teams', style: TextStyle(color: Colors.grey.shade600)),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Issues & Work Items', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 4),
+                        Text('Track bugs, features, and tasks across all teams', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                      ],
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: _showCreateIssueDialog,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: Text(isMobile ? 'New Issue' : 'New Issue / Bug'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue.shade700,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 18, vertical: 12),
+                      ),
+                    ),
                   ],
                 ),
-                ElevatedButton.icon(
-                  onPressed: _showCreateIssueDialog,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('New Issue / Bug'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue.shade700,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                const SizedBox(height: 16),
+
+                // Filter Bar
+                Card(
+                  elevation: 1,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: BorderSide(color: Colors.grey.shade300),
                   ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    child: isCompact
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              TextField(
+                                decoration: InputDecoration(
+                                  hintText: 'Search by issue key, title, assignee...',
+                                  prefixIcon: const Icon(Icons.search, size: 20),
+                                  isDense: true,
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                ),
+                                onChanged: (val) => setState(() => _searchQuery = val),
+                              ),
+                              const SizedBox(height: 10),
+                              SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  children: [
+                                    DropdownButton<int?>(
+                                      value: _selectedProjectId,
+                                      hint: const Text('All Projects'),
+                                      underline: const SizedBox(),
+                                      items: [
+                                        const DropdownMenuItem(value: null, child: Text('All Projects')),
+                                        ..._projects.map((p) => DropdownMenuItem(value: p.id, child: Text(p.name))),
+                                      ],
+                                      onChanged: (val) {
+                                        setState(() => _selectedProjectId = val);
+                                        _loadData();
+                                      },
+                                    ),
+                                    const SizedBox(width: 16),
+                                    DropdownButton<String>(
+                                      value: _selectedStatus,
+                                      underline: const SizedBox(),
+                                      items: const [
+                                        DropdownMenuItem(value: 'ALL', child: Text('All Statuses')),
+                                        DropdownMenuItem(value: 'OPEN', child: Text('OPEN')),
+                                        DropdownMenuItem(value: 'ASSIGNED', child: Text('ASSIGNED')),
+                                        DropdownMenuItem(value: 'IN_PROGRESS', child: Text('IN PROGRESS')),
+                                        DropdownMenuItem(value: 'IN_REVIEW', child: Text('IN REVIEW')),
+                                        DropdownMenuItem(value: 'RESOLVED', child: Text('RESOLVED')),
+                                        DropdownMenuItem(value: 'CLOSED', child: Text('CLOSED')),
+                                      ],
+                                      onChanged: (val) {
+                                        setState(() => _selectedStatus = val!);
+                                        _loadData();
+                                      },
+                                    ),
+                                    const SizedBox(width: 16),
+                                    DropdownButton<String>(
+                                      value: _selectedPriority,
+                                      underline: const SizedBox(),
+                                      items: const [
+                                        DropdownMenuItem(value: 'ALL', child: Text('All Priorities')),
+                                        DropdownMenuItem(value: 'CRITICAL', child: Text('CRITICAL')),
+                                        DropdownMenuItem(value: 'HIGH', child: Text('HIGH')),
+                                        DropdownMenuItem(value: 'MEDIUM', child: Text('MEDIUM')),
+                                        DropdownMenuItem(value: 'LOW', child: Text('LOW')),
+                                      ],
+                                      onChanged: (val) {
+                                        setState(() => _selectedPriority = val!);
+                                        _loadData();
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          )
+                        : Row(
+                            children: [
+                              // Search Field
+                              Expanded(
+                                flex: 2,
+                                child: TextField(
+                                  decoration: InputDecoration(
+                                    hintText: 'Search by issue key, title, assignee...',
+                                    prefixIcon: const Icon(Icons.search, size: 20),
+                                    isDense: true,
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  ),
+                                  onChanged: (val) => setState(() => _searchQuery = val),
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+
+                              // Project Filter
+                              DropdownButton<int?>(
+                                value: _selectedProjectId,
+                                hint: const Text('All Projects'),
+                                underline: const SizedBox(),
+                                items: [
+                                  const DropdownMenuItem(value: null, child: Text('All Projects')),
+                                  ..._projects.map((p) => DropdownMenuItem(value: p.id, child: Text(p.name))),
+                                ],
+                                onChanged: (val) {
+                                  setState(() => _selectedProjectId = val);
+                                  _loadData();
+                                },
+                              ),
+                              const SizedBox(width: 16),
+
+                              // Status Filter
+                              DropdownButton<String>(
+                                value: _selectedStatus,
+                                underline: const SizedBox(),
+                                items: const [
+                                  DropdownMenuItem(value: 'ALL', child: Text('All Statuses')),
+                                  DropdownMenuItem(value: 'OPEN', child: Text('OPEN')),
+                                  DropdownMenuItem(value: 'ASSIGNED', child: Text('ASSIGNED')),
+                                  DropdownMenuItem(value: 'IN_PROGRESS', child: Text('IN PROGRESS')),
+                                  DropdownMenuItem(value: 'IN_REVIEW', child: Text('IN REVIEW')),
+                                  DropdownMenuItem(value: 'RESOLVED', child: Text('RESOLVED')),
+                                  DropdownMenuItem(value: 'CLOSED', child: Text('CLOSED')),
+                                ],
+                                onChanged: (val) {
+                                  setState(() => _selectedStatus = val!);
+                                  _loadData();
+                                },
+                              ),
+                              const SizedBox(width: 16),
+
+                              // Priority Filter
+                              DropdownButton<String>(
+                                value: _selectedPriority,
+                                underline: const SizedBox(),
+                                items: const [
+                                  DropdownMenuItem(value: 'ALL', child: Text('All Priorities')),
+                                  DropdownMenuItem(value: 'CRITICAL', child: Text('CRITICAL')),
+                                  DropdownMenuItem(value: 'HIGH', child: Text('HIGH')),
+                                  DropdownMenuItem(value: 'MEDIUM', child: Text('MEDIUM')),
+                                  DropdownMenuItem(value: 'LOW', child: Text('LOW')),
+                                ],
+                                onChanged: (val) {
+                                  setState(() => _selectedPriority = val!);
+                                  _loadData();
+                                },
+                              ),
+                            ],
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Issues List / Table
+                Expanded(
+                  child: _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : _filteredIssues.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.inbox_outlined, size: 48, color: Colors.grey.shade400),
+                                  const SizedBox(height: 8),
+                                  Text('No issues match current filter', style: TextStyle(color: Colors.grey.shade600)),
+                                ],
+                              ),
+                            )
+                          : Card(
+                              elevation: 1,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                side: BorderSide(color: Colors.grey.shade300),
+                              ),
+                              child: ListView.separated(
+                                itemCount: _filteredIssues.length,
+                                separatorBuilder: (context, _) => const Divider(height: 1),
+                                itemBuilder: (context, index) {
+                                  final issue = _filteredIssues[index];
+                                  return ListTile(
+                                    leading: Tooltip(
+                                      message: 'Click to copy ${issue.issueKey}',
+                                      child: InkWell(
+                                        onTap: () => ClipboardHelper.copy(context, issue.issueKey, label: 'Issue Key'),
+                                        borderRadius: BorderRadius.circular(4),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: issue.type == 'BUG' ? Colors.red.shade50 : Colors.blue.shade50,
+                                            borderRadius: BorderRadius.circular(4),
+                                            border: Border.all(
+                                              color: issue.type == 'BUG' ? Colors.red.shade200 : Colors.blue.shade200,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                issue.issueKey,
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: issue.type == 'BUG' ? Colors.red.shade900 : Colors.blue.shade900,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Icon(
+                                                Icons.copy,
+                                                size: 10,
+                                                color: issue.type == 'BUG' ? Colors.red.shade700 : Colors.blue.shade700,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    title: Row(
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            issue.title,
+                                            style: const TextStyle(fontWeight: FontWeight.w600),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text('(${issue.type})', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                                      ],
+                                    ),
+                                    subtitle: isMobile
+                                        ? Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                '${issue.projectName} · ${issue.assigneeName ?? "Unassigned"}',
+                                                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Wrap(
+                                                spacing: 6,
+                                                runSpacing: 4,
+                                                children: [
+                                                  _buildPriorityBadge(issue.priority),
+                                                  _buildStatusBadge(issue.status),
+                                                ],
+                                              ),
+                                            ],
+                                          )
+                                        : Text(
+                                            '${issue.projectName} · Assigned to: ${issue.assigneeName ?? "Unassigned"} · Due: ${issue.dueDate ?? "None"}',
+                                            style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                                          ),
+                                    trailing: isMobile
+                                        ? const Icon(Icons.chevron_right, color: Colors.grey)
+                                        : Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              _buildPriorityBadge(issue.priority),
+                                              const SizedBox(width: 12),
+                                              _buildStatusBadge(issue.status),
+                                              const SizedBox(width: 8),
+                                              const Icon(Icons.chevron_right, color: Colors.grey),
+                                            ],
+                                          ),
+                                    onTap: () => _showIssueDetails(issue),
+                                  );
+                                },
+                              ),
+                            ),
                 ),
               ],
             ),
-            const SizedBox(height: 20),
-
-            // Filter Bar
-            Card(
-              elevation: 1,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-                side: BorderSide(color: Colors.grey.shade300),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                child: Row(
-                  children: [
-                    // Search Field
-                    Expanded(
-                      flex: 2,
-                      child: TextField(
-                        decoration: InputDecoration(
-                          hintText: 'Search by issue key, title, assignee...',
-                          prefixIcon: const Icon(Icons.search, size: 20),
-                          isDense: true,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        ),
-                        onChanged: (val) => setState(() => _searchQuery = val),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-
-                    // Project Filter
-                    DropdownButton<int?>(
-                      value: _selectedProjectId,
-                      hint: const Text('All Projects'),
-                      underline: const SizedBox(),
-                      items: [
-                        const DropdownMenuItem(value: null, child: Text('All Projects')),
-                        ..._projects.map((p) => DropdownMenuItem(value: p.id, child: Text(p.name))),
-                      ],
-                      onChanged: (val) {
-                        setState(() => _selectedProjectId = val);
-                        _loadData();
-                      },
-                    ),
-                    const SizedBox(width: 16),
-
-                    // Status Filter
-                    DropdownButton<String>(
-                      value: _selectedStatus,
-                      underline: const SizedBox(),
-                      items: const [
-                        DropdownMenuItem(value: 'ALL', child: Text('All Statuses')),
-                        DropdownMenuItem(value: 'OPEN', child: Text('OPEN')),
-                        DropdownMenuItem(value: 'ASSIGNED', child: Text('ASSIGNED')),
-                        DropdownMenuItem(value: 'IN_PROGRESS', child: Text('IN PROGRESS')),
-                        DropdownMenuItem(value: 'IN_REVIEW', child: Text('IN REVIEW')),
-                        DropdownMenuItem(value: 'RESOLVED', child: Text('RESOLVED')),
-                        DropdownMenuItem(value: 'CLOSED', child: Text('CLOSED')),
-                      ],
-                      onChanged: (val) {
-                        setState(() => _selectedStatus = val!);
-                        _loadData();
-                      },
-                    ),
-                    const SizedBox(width: 16),
-
-                    // Priority Filter
-                    DropdownButton<String>(
-                      value: _selectedPriority,
-                      underline: const SizedBox(),
-                      items: const [
-                        DropdownMenuItem(value: 'ALL', child: Text('All Priorities')),
-                        DropdownMenuItem(value: 'CRITICAL', child: Text('CRITICAL')),
-                        DropdownMenuItem(value: 'HIGH', child: Text('HIGH')),
-                        DropdownMenuItem(value: 'MEDIUM', child: Text('MEDIUM')),
-                        DropdownMenuItem(value: 'LOW', child: Text('LOW')),
-                      ],
-                      onChanged: (val) {
-                        setState(() => _selectedPriority = val!);
-                        _loadData();
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Issues List / Table
-            Expanded(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _filteredIssues.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.inbox_outlined, size: 48, color: Colors.grey.shade400),
-                              const SizedBox(height: 8),
-                              Text('No issues match current filter', style: TextStyle(color: Colors.grey.shade600)),
-                            ],
-                          ),
-                        )
-                      : Card(
-                          elevation: 1,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            side: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          child: ListView.separated(
-                            itemCount: _filteredIssues.length,
-                            separatorBuilder: (context, _) => const Divider(height: 1),
-                            itemBuilder: (context, index) {
-                              final issue = _filteredIssues[index];
-                              return ListTile(
-                                leading: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: issue.type == 'BUG' ? Colors.red.shade50 : Colors.blue.shade50,
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(
-                                      color: issue.type == 'BUG' ? Colors.red.shade200 : Colors.blue.shade200,
-                                    ),
-                                  ),
-                                  child: Text(
-                                    issue.issueKey,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: issue.type == 'BUG' ? Colors.red.shade900 : Colors.blue.shade900,
-                                    ),
-                                  ),
-                                ),
-                                title: Row(
-                                  children: [
-                                    Flexible(
-                                      child: Text(
-                                        issue.title,
-                                        style: const TextStyle(fontWeight: FontWeight.w600),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text('(${issue.type})', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-                                  ],
-                                ),
-                                subtitle: Text(
-                                  '${issue.projectName} · Assigned to: ${issue.assigneeName ?? "Unassigned"} · Due: ${issue.dueDate ?? "None"}',
-                                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-                                ),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    _buildPriorityBadge(issue.priority),
-                                    const SizedBox(width: 12),
-                                    _buildStatusBadge(issue.status),
-                                    const SizedBox(width: 8),
-                                    const Icon(Icons.chevron_right, color: Colors.grey),
-                                  ],
-                                ),
-                                onTap: () => _showIssueDetails(issue),
-                              );
-                            },
-                          ),
-                        ),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -321,8 +443,8 @@ class _IssuesScreenState extends State<IssuesScreen> {
           builder: (context, setDialogState) {
             return AlertDialog(
               title: const Text('Create New Issue / Bug'),
-              content: SizedBox(
-                width: 500,
+              content: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 500),
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -471,26 +593,34 @@ class _IssuesScreenState extends State<IssuesScreen> {
               title: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: Colors.blue.shade200),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: Colors.blue.shade200),
+                          ),
+                          child: Text(issue.issueKey, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue.shade900)),
                         ),
-                        child: Text(issue.issueKey, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue.shade900)),
-                      ),
-                      const SizedBox(width: 10),
-                      Text(issue.title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    ],
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            issue.title,
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
                 ],
               ),
-              content: SizedBox(
-                width: 650,
+              content: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 650),
                 child: SingleChildScrollView(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -502,54 +632,67 @@ class _IssuesScreenState extends State<IssuesScreen> {
                           color: Colors.grey.shade100,
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: Row(
+                        child: Wrap(
+                          alignment: WrapAlignment.spaceBetween,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 12,
+                          runSpacing: 8,
                           children: [
-                            const Text('Status: ', style: TextStyle(fontWeight: FontWeight.bold)),
-                            const SizedBox(width: 8),
-                            DropdownButton<String>(
-                              value: issue.status,
-                              isDense: true,
-                              items: const [
-                                DropdownMenuItem(value: 'OPEN', child: Text('OPEN')),
-                                DropdownMenuItem(value: 'ASSIGNED', child: Text('ASSIGNED')),
-                                DropdownMenuItem(value: 'IN_PROGRESS', child: Text('IN PROGRESS')),
-                                DropdownMenuItem(value: 'IN_REVIEW', child: Text('IN REVIEW')),
-                                DropdownMenuItem(value: 'RESOLVED', child: Text('RESOLVED')),
-                                DropdownMenuItem(value: 'CLOSED', child: Text('CLOSED')),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text('Status: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                                const SizedBox(width: 8),
+                                DropdownButton<String>(
+                                  value: issue.status,
+                                  isDense: true,
+                                  items: const [
+                                    DropdownMenuItem(value: 'OPEN', child: Text('OPEN')),
+                                    DropdownMenuItem(value: 'ASSIGNED', child: Text('ASSIGNED')),
+                                    DropdownMenuItem(value: 'IN_PROGRESS', child: Text('IN PROGRESS')),
+                                    DropdownMenuItem(value: 'IN_REVIEW', child: Text('IN REVIEW')),
+                                    DropdownMenuItem(value: 'RESOLVED', child: Text('RESOLVED')),
+                                    DropdownMenuItem(value: 'CLOSED', child: Text('CLOSED')),
+                                  ],
+                                  onChanged: (newStatus) async {
+                                    if (newStatus != null) {
+                                      await ApiService.instance.updateIssueStatus(issue.id, newStatus);
+                                      setDetailsState(() => issue.status = newStatus);
+                                      _loadData();
+                                    }
+                                  },
+                                ),
                               ],
-                              onChanged: (newStatus) async {
-                                if (newStatus != null) {
-                                  await ApiService.instance.updateIssueStatus(issue.id, newStatus);
-                                  setDetailsState(() => issue.status = newStatus);
-                                  _loadData();
-                                }
-                              },
                             ),
-                            const Spacer(),
-                            const Text('Assignee: ', style: TextStyle(fontWeight: FontWeight.bold)),
-                            const SizedBox(width: 8),
-                            DropdownButton<int?>(
-                              value: issue.assigneeId,
-                              hint: const Text('Unassigned'),
-                              isDense: true,
-                              items: [
-                                const DropdownMenuItem<int?>(value: null, child: Text('Unassigned')),
-                                ..._users.map((u) => DropdownMenuItem<int?>(
-                                  value: u.id,
-                                  child: Text(u.fullName),
-                                )),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text('Assignee: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                                const SizedBox(width: 8),
+                                DropdownButton<int?>(
+                                  value: issue.assigneeId,
+                                  hint: const Text('Unassigned'),
+                                  isDense: true,
+                                  items: [
+                                    const DropdownMenuItem<int?>(value: null, child: Text('Unassigned')),
+                                    ..._users.map((u) => DropdownMenuItem<int?>(
+                                      value: u.id,
+                                      child: Text(u.fullName),
+                                    )),
+                                  ],
+                                  onChanged: (newAssigneeId) async {
+                                    if (newAssigneeId != null) {
+                                      await ApiService.instance.reassignIssue(issue.id, newAssigneeId);
+                                      final assignedUser = _users.firstWhere((u) => u.id == newAssigneeId);
+                                      setDetailsState(() {
+                                        issue.assigneeId = newAssigneeId;
+                                        issue.assigneeName = assignedUser.fullName;
+                                      });
+                                      _loadData();
+                                    }
+                                  },
+                                ),
                               ],
-                              onChanged: (newAssigneeId) async {
-                                if (newAssigneeId != null) {
-                                  await ApiService.instance.reassignIssue(issue.id, newAssigneeId);
-                                  final assignedUser = _users.firstWhere((u) => u.id == newAssigneeId);
-                                  setDetailsState(() {
-                                    issue.assigneeId = newAssigneeId;
-                                    issue.assigneeName = assignedUser.fullName;
-                                  });
-                                  _loadData();
-                                }
-                              },
                             ),
                           ],
                         ),
@@ -557,12 +700,14 @@ class _IssuesScreenState extends State<IssuesScreen> {
                       const SizedBox(height: 16),
 
                       // Details Grid
-                      Row(
+                      Wrap(
+                        spacing: 16,
+                        runSpacing: 12,
                         children: [
-                          Expanded(child: _buildDetailItem('Project', issue.projectName)),
-                          Expanded(child: _buildDetailItem('Priority', issue.priority)),
-                          Expanded(child: _buildDetailItem('Due Date', issue.dueDate ?? 'Not set')),
-                          Expanded(child: _buildDetailItem('Time Logged', '${issue.actualMinutes} mins')),
+                          SizedBox(width: 120, child: _buildDetailItem('Project', issue.projectName)),
+                          SizedBox(width: 120, child: _buildDetailItem('Priority', issue.priority)),
+                          SizedBox(width: 120, child: _buildDetailItem('Due Date', issue.dueDate ?? 'Not set')),
+                          SizedBox(width: 120, child: _buildDetailItem('Time Logged', '${issue.actualMinutes} mins')),
                         ],
                       ),
                       const SizedBox(height: 16),

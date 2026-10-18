@@ -107,10 +107,15 @@ public class AuthService {
                 perms.add("REPORTS_VIEW");
                 // fall through
             case MANAGER:
+                perms.add("TEAM_LEAD_ASSIGN");
+                perms.add("PROJECT_MANAGE");
+                perms.add("TEAM_REPORTS_VIEW");
+                // fall through
+            case TEAM_LEAD:
                 perms.add("ISSUE_CREATE");
                 perms.add("ISSUE_ASSIGN");
                 perms.add("ISSUE_REVIEW");
-                perms.add("TEAM_REPORTS_VIEW");
+                perms.add("TEAM_SPRINT_MANAGE");
                 // fall through
             case EMPLOYEE:
                 perms.add("MY_ISSUES_VIEW");
