@@ -232,7 +232,13 @@ class _IssuesScreenState extends State<IssuesScreen> {
                                 ),
                                 title: Row(
                                   children: [
-                                    Text(issue.title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                                    Flexible(
+                                      child: Text(
+                                        issue.title,
+                                        style: const TextStyle(fontWeight: FontWeight.w600),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
                                     const SizedBox(width: 8),
                                     Text('(${issue.type})', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                                   ],

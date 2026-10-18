@@ -64,7 +64,13 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
                             ),
                             title: Row(
                               children: [
-                                Text(log.action, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                Flexible(
+                                  child: Text(
+                                    log.action,
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
                                 const SizedBox(width: 8),
                                 Chip(label: Text(log.entityType, style: const TextStyle(fontSize: 10))),
                               ],

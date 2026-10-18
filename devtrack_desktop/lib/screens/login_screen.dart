@@ -9,8 +9,8 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _emailController = TextEditingController(text: 'arun.manager@devtrack.com');
-  final _passwordController = TextEditingController(text: 'password123');
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -45,14 +45,6 @@ class _LoginScreenState extends State<LoginScreen> {
         });
       }
     }
-  }
-
-  void _fillAccount(String email, String password) {
-    setState(() {
-      _emailController.text = email;
-      _passwordController.text = password;
-      _errorMessage = null;
-    });
   }
 
   @override
@@ -179,26 +171,6 @@ class _LoginScreenState extends State<LoginScreen> {
                             )
                           : const Text('Sign In', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                     ),
-                    const SizedBox(height: 28),
-
-                    // Quick Role Fill for Easy Testing
-                    const Divider(),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Quick Test Credentials (Click to fill):',
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        _buildAccountChip('Super Admin', 'superadmin@devtrack.com', 'admin123', Colors.purple),
-                        _buildAccountChip('Admin', 'admin@devtrack.com', 'admin123', Colors.indigo),
-                        _buildAccountChip('Manager (Arun)', 'arun.manager@devtrack.com', 'password123', Colors.blue),
-                        _buildAccountChip('Developer (Karthi)', 'karthi.dev@devtrack.com', 'password123', Colors.teal),
-                      ],
-                    ),
                   ],
                 ),
               ),
@@ -206,20 +178,6 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildAccountChip(String label, String email, String password, MaterialColor color) {
-    return ActionChip(
-      avatar: CircleAvatar(
-        radius: 10,
-        backgroundColor: color.shade700,
-        child: Text(label[0], style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)),
-      ),
-      label: Text(label, style: TextStyle(fontSize: 11, color: color.shade900)),
-      backgroundColor: color.shade50,
-      side: BorderSide(color: color.shade200),
-      onPressed: () => _fillAccount(email, password),
     );
   }
 }

@@ -12,7 +12,10 @@ class ApiService {
   static final ApiService instance = ApiService._internal();
   ApiService._internal();
 
-  final String baseUrl = 'http://localhost:8080/api/v1';
+  final String baseUrl = const String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'http://localhost:8080/api/v1',
+  );
 
   Map<String, String> _headers() {
     final token = AuthState.instance.token;

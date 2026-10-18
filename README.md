@@ -53,9 +53,8 @@ DevTrack enforces real authentication and role-based access control directly aga
 
 1. **Dedicated Login Screen**:
    - The application launches with a clean Sign-In interface.
-   - Users must enter valid credentials.
+   - Users enter their email and password credentials.
    - On authentication, the backend validates passwords with `BCrypt`, issues a signed JWT token, and returns user details with authorized role permissions.
-   - For fast convenience while testing, one-click credential chips are provided at the bottom of the sign-in card.
 
 2. **Strict Role-Based Flow & Navigation**:
    - **Super Admin**: Access to Dashboard, Projects, Issues, Teams, Users management, and System Audit Logs.
@@ -68,7 +67,23 @@ DevTrack enforces real authentication and role-based access control directly aga
 
 ## ⚡ Quick Start Guide
 
-### 1. Running the Spring Boot Backend
+### 1. Environment Configuration (.env)
+
+DevTrack reads `.env` configuration files automatically. A template `.env.example` is provided:
+
+```bash
+# In the project root or devtrack_backend:
+copy .env.example .env
+```
+
+Key `.env` parameters:
+- `SPRING_PROFILES_ACTIVE`: `postgres` (for PostgreSQL 18) or `default` (for zero-config local H2)
+- `DB_HOST`, `DB_PORT`, `DB_NAME`: Host, port, and database name (defaults: `localhost:5432/devtrack`)
+- `DB_USERNAME`, `DB_PASSWORD`: Your local database credentials
+- `SERVER_PORT`: `8080` (API port)
+- `JWT_SECRET`: 256-bit token signing secret
+
+### 2. Running the Spring Boot Backend
 
 The backend includes a standalone Maven wrapper (`mvnw.cmd`) and runs with zero external tools needed beyond Java 17.
 
@@ -77,17 +92,10 @@ cd devtrack_backend
 .\mvnw.cmd spring-boot:run
 ```
 
-- **Default Database**: Persistent H2 database in PostgreSQL compatibility mode located in `./data/devtrack.mv.db` (persists data across restarts without needing manual DB configuration).
-- **PostgreSQL Database (Optional)**: To connect to PostgreSQL directly:
-  ```powershell
-  $env:SPRING_PROFILES_ACTIVE="postgres"
-  $env:DB_USERNAME="postgres"
-  $env:DB_PASSWORD="your_postgres_password"
-  .\mvnw.cmd spring-boot:run
-  ```
+- **PostgreSQL Database**: With `SPRING_PROFILES_ACTIVE=postgres` in `.env`, Spring Boot connects to PostgreSQL and automatically verifies/updates all tables.
 - **DBeaver Inspection**: The full DDL schema is provided in `devtrack_backend/src/main/resources/schema.sql`.
 
-### 2. Running the Flutter Windows Desktop App
+### 3. Running the Flutter App (Desktop & Web)
 
 ```bash
 cd devtrack_desktop
