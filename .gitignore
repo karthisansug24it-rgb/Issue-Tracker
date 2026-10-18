@@ -1,0 +1,34 @@
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE & Editor files
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Backend build & runtime
+devtrack_backend/target/
+devtrack_backend/data/
+*.mv.db
+*.trace.db
+
+# Flutter build & runtime
+devtrack_desktop/.dart_tool/
+devtrack_desktop/build/
+devtrack_desktop/.flutter-plugins
+devtrack_desktop/.flutter-plugins-dependencies
+devtrack_desktop/.pub-cache/
+devtrack_desktop/.pub/
