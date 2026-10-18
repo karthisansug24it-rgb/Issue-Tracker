@@ -16,8 +16,7 @@ public class RegisterRequest {
     @NotBlank(message = "Password is required")
     private String password;
 
-    @NotNull(message = "Role is required")
-    private RoleType role;
+    private RoleType role = RoleType.EMPLOYEE;
 
     private String department;
     private String jobTitle;

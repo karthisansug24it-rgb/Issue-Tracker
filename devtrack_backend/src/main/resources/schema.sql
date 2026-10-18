@@ -160,3 +160,17 @@ CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status);
 CREATE INDEX IF NOT EXISTS idx_issues_priority ON issues(priority);
 CREATE INDEX IF NOT EXISTS idx_project_members_user ON project_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON notifications(recipient_id);
+
+-- DEFAULT SYSTEM SUPER ADMIN ACCOUNT
+-- Email: superadmin@devtrack.com | Password: admin123
+INSERT INTO users (full_name, email, password, role, department, job_title, active)
+VALUES (
+    'Super Admin',
+    'superadmin@devtrack.com',
+    '$2a$10$f/9qS/U02tK1kL.aXUq4u.g8jC0i8u5O.F9r0g6gHh2z8H9iQ6UWe',
+    'SUPER_ADMIN',
+    'Executive',
+    'System Super Admin',
+    TRUE
+)
+ON CONFLICT (email) DO NOTHING;

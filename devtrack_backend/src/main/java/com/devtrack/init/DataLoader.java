@@ -56,16 +56,23 @@ public class DataLoader implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        if (userRepository.count() > 0) {
-            return; // Already initialized
+        // Always ensure the Super Admin account exists and is ready for use
+        User superAdmin = userRepository.findByEmail("superadmin@devtrack.com").orElse(null);
+        if (superAdmin == null) {
+            superAdmin = new User(null, "Super Admin", "superadmin@devtrack.com",
+                    passwordEncoder.encode("admin123"), RoleType.SUPER_ADMIN, "Executive", "System Super Admin");
+            superAdmin = userRepository.save(superAdmin);
+            System.out.println("Super Admin verified/created: superadmin@devtrack.com / admin123");
+        }
+
+        if (userRepository.count() > 1) {
+            return; // Remainder of seed data already initialized
         }
 
         System.out.println("Initializing DevTrack with realistic sample data...");
 
         // 1. Seed Users (All 4 hierarchy levels)
-        User superAdmin = new User(null, "Sundar Pichai", "superadmin@devtrack.com",
-                passwordEncoder.encode("admin123"), RoleType.SUPER_ADMIN, "Executive", "System Super Admin");
-        superAdmin = userRepository.save(superAdmin);
+
 
         User admin = new User(null, "Divya Admin", "admin@devtrack.com",
                 passwordEncoder.encode("admin123"), RoleType.ADMIN, "Operations", "Organization Admin");

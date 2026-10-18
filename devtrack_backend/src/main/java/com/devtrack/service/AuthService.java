@@ -61,13 +61,23 @@ public class AuthService {
             throw new RuntimeException("Email already registered: " + email);
         }
 
+        // Rule: All new accounts created publicly start with the basic user role (EMPLOYEE).
+        // If this is the very first account created in an empty database, it becomes SUPER_ADMIN.
+        // Subsequent role upgrades (Manager, Admin, Super Admin) are performed by administrators.
+        RoleType assignedRole = RoleType.EMPLOYEE;
+        if (userRepository.count() == 0) {
+            assignedRole = RoleType.SUPER_ADMIN;
+        }
+
         User user = new User();
         user.setFullName(request.getFullName().trim());
         user.setEmail(email);
         user.setPassword(passwordEncoder.encode(request.getPassword()));
-        user.setRole(request.getRole() != null ? request.getRole() : RoleType.EMPLOYEE);
-        user.setDepartment(request.getDepartment());
-        user.setJobTitle(request.getJobTitle());
+        user.setRole(assignedRole);
+        user.setDepartment(request.getDepartment() != null && !request.getDepartment().isBlank()
+                ? request.getDepartment().trim() : "Engineering");
+        user.setJobTitle(request.getJobTitle() != null && !request.getJobTitle().isBlank()
+                ? request.getJobTitle().trim() : "Employee");
         user.setActive(true);
 
         User saved = userRepository.save(user);

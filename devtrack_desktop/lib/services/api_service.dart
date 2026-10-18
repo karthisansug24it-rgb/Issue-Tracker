@@ -47,6 +47,39 @@ class ApiService {
     }
   }
 
+  // 1b. Public Account Creation (Default role is basic user EMPLOYEE)
+  Future<Map<String, dynamic>> register({
+    required String fullName,
+    required String email,
+    required String password,
+    String? department,
+    String? jobTitle,
+  }) async {
+    final url = Uri.parse('$baseUrl/auth/register');
+    final response = await http.post(
+      url,
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: jsonEncode({
+        'fullName': fullName.trim(),
+        'email': email.trim().toLowerCase(),
+        'password': password,
+        'department': department ?? 'Engineering',
+        'jobTitle': jobTitle ?? 'Employee',
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      String errorMsg = 'Registration failed (${response.statusCode})';
+      try {
+        final body = jsonDecode(response.body);
+        if (body['message'] != null) errorMsg = body['message'];
+      } catch (_) {}
+      throw Exception(errorMsg);
+    }
+  }
+
   // 2. Dashboard Metrics
   Future<DashboardMetricsModel> getDashboardMetrics() async {
     final url = Uri.parse('$baseUrl/dashboard/metrics');
@@ -220,7 +253,26 @@ class ApiService {
       final List data = jsonDecode(response.body);
       return data.map((e) => UserModel.fromJson(e)).toList();
     }
-    return [];
+  }
+
+  Future<UserModel> updateUserRole(int userId, String newRole) async {
+    final url = Uri.parse('$baseUrl/users/$userId/role');
+    final response = await http.patch(
+      url,
+      headers: _headers(),
+      body: jsonEncode({'role': newRole}),
+    );
+
+    if (response.statusCode == 200) {
+      return UserModel.fromJson(jsonDecode(response.body));
+    } else {
+      String errorMsg = 'Failed to update role (${response.statusCode})';
+      try {
+        final body = jsonDecode(response.body);
+        if (body['message'] != null) errorMsg = body['message'];
+      } catch (_) {}
+      throw Exception(errorMsg);
+    }
   }
 
   // 8. Audit Logs

@@ -39,6 +39,22 @@ class AuthState extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> register({
+    required String fullName,
+    required String email,
+    required String password,
+    String? department,
+    String? jobTitle,
+  }) async {
+    await ApiService.instance.register(
+      fullName: fullName,
+      email: email,
+      password: password,
+      department: department,
+      jobTitle: jobTitle,
+    );
+  }
+
   void logout() {
     _currentUser = null;
     _token = null;

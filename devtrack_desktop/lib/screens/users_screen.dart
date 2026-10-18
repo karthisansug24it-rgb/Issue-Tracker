@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/user_model.dart';
 import '../services/api_service.dart';
+import '../services/auth_state.dart';
 
 class UsersScreen extends StatefulWidget {
   const UsersScreen({super.key});
@@ -29,8 +30,150 @@ class _UsersScreenState extends State<UsersScreen> {
     }
   }
 
+  Future<void> _showUpgradeRoleDialog(UserModel user) async {
+    String selectedRole = user.role;
+
+    final roles = [
+      {'role': 'EMPLOYEE', 'label': 'Employee (Basic User)', 'desc': 'Work on assigned issues, submit comments & time logs'},
+      {'role': 'MANAGER', 'label': 'Manager', 'desc': 'Create issues, assign work items, review bug resolutions'},
+      {'role': 'ADMIN', 'label': 'Admin', 'desc': 'Manage projects, departments, teams, and user accounts'},
+      {'role': 'SUPER_ADMIN', 'label': 'Super Admin', 'desc': 'Global system access, administrative controls, and audit trails'},
+    ];
+
+    await showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: _getRoleColor(user.role),
+                    radius: 16,
+                    child: Text(
+                      user.fullName.isNotEmpty ? user.fullName[0] : 'U',
+                      style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Upgrade / Change Role', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                        Text('${user.fullName} (${user.email})', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 480,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Select New Role Level:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const SizedBox(height: 10),
+                    ...roles.map((r) {
+                      final isSelected = selectedRole == r['role'];
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: isSelected ? _getRoleColor(r['role']!).withValues(alpha: 0.08) : Colors.transparent,
+                          border: Border.all(
+                            color: isSelected ? _getRoleColor(r['role']!) : Colors.grey.shade300,
+                            width: isSelected ? 1.5 : 1.0,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: RadioListTile<String>(
+                          value: r['role']!,
+                          groupValue: selectedRole,
+                          title: Row(
+                            children: [
+                              Text(r['label']!, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                              const SizedBox(width: 8),
+                              Chip(
+                                label: Text(r['role']!, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold)),
+                                backgroundColor: _getRoleColor(r['role']!).withValues(alpha: 0.15),
+                                padding: EdgeInsets.zero,
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ],
+                          ),
+                          subtitle: Text(r['desc']!, style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
+                          onChanged: (val) {
+                            if (val != null) {
+                              setDialogState(() => selectedRole = val);
+                            }
+                          },
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1E40AF),
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: selectedRole == user.role
+                      ? null
+                      : () async {
+                          Navigator.pop(dialogCtx);
+                          await _performUpgradeRole(user, selectedRole);
+                        },
+                  child: const Text('Confirm Role Upgrade'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _performUpgradeRole(UserModel user, String newRole) async {
+    try {
+      final updated = await ApiService.instance.updateUserRole(user.id, newRole);
+      setState(() {
+        final index = _users.indexWhere((u) => u.id == user.id);
+        if (index != -1) {
+          _users[index] = updated;
+        }
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.green.shade800,
+            content: Text('${user.fullName} successfully upgraded to $newRole!'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.red.shade800,
+            content: Text('Failed to update role: $e'),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final canUpgradeRole = AuthState.instance.isAdmin;
+
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       body: Padding(
@@ -38,9 +181,27 @@ class _UsersScreenState extends State<UsersScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Users & Role Hierarchy', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
-            Text('Manage system accounts, access levels, and department designations', style: TextStyle(color: Colors.grey.shade600)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Users & Role Hierarchy', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Manage user accounts and upgrade permission hierarchy (Employee ➔ Manager ➔ Admin ➔ Super Admin)',
+                      style: TextStyle(color: Colors.grey.shade600),
+                    ),
+                  ],
+                ),
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  tooltip: 'Reload Users',
+                  onPressed: _loadUsers,
+                ),
+              ],
+            ),
             const SizedBox(height: 24),
 
             Expanded(
@@ -67,7 +228,13 @@ class _UsersScreenState extends State<UsersScreen> {
                             ),
                             title: Row(
                               children: [
-                                Text(u.fullName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                Flexible(
+                                  child: Text(
+                                    u.fullName,
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
                                 const SizedBox(width: 8),
                                 Chip(
                                   label: Text(u.role, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
@@ -80,6 +247,19 @@ class _UsersScreenState extends State<UsersScreen> {
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
+                                if (canUpgradeRole) ...[
+                                  OutlinedButton.icon(
+                                    icon: const Icon(Icons.upgrade, size: 16),
+                                    label: const Text('Upgrade Role', style: TextStyle(fontSize: 12)),
+                                    style: OutlinedButton.styleFrom(
+                                      visualDensity: VisualDensity.compact,
+                                      foregroundColor: _getRoleColor(u.role),
+                                      side: BorderSide(color: _getRoleColor(u.role).withValues(alpha: 0.5)),
+                                    ),
+                                    onPressed: () => _showUpgradeRoleDialog(u),
+                                  ),
+                                  const SizedBox(width: 12),
+                                ],
                                 Switch(
                                   value: u.active,
                                   onChanged: (val) {
@@ -96,7 +276,10 @@ class _UsersScreenState extends State<UsersScreen> {
                                     });
                                   },
                                 ),
-                                Text(u.active ? 'Active' : 'Disabled', style: TextStyle(fontSize: 12, color: u.active ? Colors.green : Colors.grey)),
+                                Text(
+                                  u.active ? 'Active' : 'Disabled',
+                                  style: TextStyle(fontSize: 12, color: u.active ? Colors.green : Colors.grey),
+                                ),
                               ],
                             ),
                           );
@@ -112,10 +295,14 @@ class _UsersScreenState extends State<UsersScreen> {
 
   Color _getRoleColor(String role) {
     switch (role) {
-      case 'SUPER_ADMIN': return Colors.purple;
-      case 'ADMIN': return Colors.indigo;
-      case 'MANAGER': return Colors.blue.shade700;
-      default: return Colors.teal;
+      case 'SUPER_ADMIN':
+        return Colors.purple;
+      case 'ADMIN':
+        return Colors.indigo;
+      case 'MANAGER':
+        return Colors.blue.shade700;
+      default:
+        return Colors.teal;
     }
   }
 }
