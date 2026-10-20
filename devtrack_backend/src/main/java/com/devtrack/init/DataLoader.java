@@ -99,38 +99,46 @@ public class DataLoader implements CommandLineRunner {
             }
         }
 
-        if (userRepository.count() > 2) {
+        if (departmentRepository.count() > 0 || projectRepository.count() > 0) {
             return; // Remainder of seed data already initialized
         }
 
         System.out.println("Initializing DevTrack with realistic sample data...");
 
         // 1. Seed Users (All 4 hierarchy levels)
+        User admin = userRepository.findByEmail("admin@devtrack.com").orElse(null);
+        if (admin == null) {
+            admin = new User(null, "Divya Admin", "admin@devtrack.com",
+                    passwordEncoder.encode("admin123"), RoleType.ADMIN, "Operations", "Organization Admin");
+            admin = userRepository.save(admin);
+        }
 
+        if (managerArun == null) {
+            managerArun = new User(null, "Arun Kumar", "arun.manager@devtrack.com",
+                    passwordEncoder.encode("password123"), RoleType.MANAGER, "Engineering", "Engineering Manager");
+            managerArun = userRepository.save(managerArun);
+        }
 
-        User admin = new User(null, "Divya Admin", "admin@devtrack.com",
-                passwordEncoder.encode("admin123"), RoleType.ADMIN, "Operations", "Organization Admin");
-        admin = userRepository.save(admin);
+        User empKarthi = userRepository.findByEmail("karthi.dev@devtrack.com").orElse(null);
+        if (empKarthi == null) {
+            empKarthi = new User(null, "Karthi Raman", "karthi.dev@devtrack.com",
+                    passwordEncoder.encode("password123"), RoleType.EMPLOYEE, "Engineering", "Frontend Developer");
+            empKarthi = userRepository.save(empKarthi);
+        }
 
-        managerArun = new User(null, "Arun Kumar", "arun.manager@devtrack.com",
-                passwordEncoder.encode("password123"), RoleType.MANAGER, "Engineering", "Engineering Manager");
-        managerArun = userRepository.save(managerArun);
+        User empPriya = userRepository.findByEmail("priya.dev@devtrack.com").orElse(null);
+        if (empPriya == null) {
+            empPriya = new User(null, "Priya Sharma", "priya.dev@devtrack.com",
+                    passwordEncoder.encode("password123"), RoleType.EMPLOYEE, "Engineering", "Backend API Developer");
+            empPriya = userRepository.save(empPriya);
+        }
 
-        leadSuresh = new User(null, "Suresh Lead", "suresh.lead@devtrack.com",
-                passwordEncoder.encode("password123"), RoleType.TEAM_LEAD, "Engineering", "Technical Team Lead");
-        leadSuresh = userRepository.save(leadSuresh);
-
-        User empKarthi = new User(null, "Karthi Raman", "karthi.dev@devtrack.com",
-                passwordEncoder.encode("password123"), RoleType.EMPLOYEE, "Engineering", "Frontend Developer");
-        empKarthi = userRepository.save(empKarthi);
-
-        User empPriya = new User(null, "Priya Sharma", "priya.dev@devtrack.com",
-                passwordEncoder.encode("password123"), RoleType.EMPLOYEE, "Engineering", "Backend API Developer");
-        empPriya = userRepository.save(empPriya);
-
-        User testerVijay = new User(null, "Vijay Tester", "vijay.qa@devtrack.com",
-                passwordEncoder.encode("password123"), RoleType.EMPLOYEE, "Quality Assurance", "QA Automation Tester");
-        testerVijay = userRepository.save(testerVijay);
+        User testerVijay = userRepository.findByEmail("vijay.qa@devtrack.com").orElse(null);
+        if (testerVijay == null) {
+            testerVijay = new User(null, "Vijay Tester", "vijay.qa@devtrack.com",
+                    passwordEncoder.encode("password123"), RoleType.EMPLOYEE, "Quality Assurance", "QA Automation Tester");
+            testerVijay = userRepository.save(testerVijay);
+        }
 
         // 2. Seed Departments
         Department deptEng = departmentRepository.save(new Department("Engineering", "ENG", "Software engineering and development"));
