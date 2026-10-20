@@ -46,12 +46,16 @@ class AuthState extends ChangeNotifier {
           final liveUser = await ApiService.instance.getCurrentUser();
           _currentUser = liveUser;
           saveStorageString('auth_user', jsonEncode(liveUser.toJson()));
-        } catch (_) {
-          // If token has expired or is invalid, clear session
-          _token = null;
-          _currentUser = null;
-          removeStorageString('auth_token');
-          removeStorageString('auth_user');
+        } catch (e) {
+          // Only clear session if backend explicitly responds with 401 Unauthorized
+          final errStr = e.toString().toLowerCase();
+          if (errStr.contains('401') || errStr.contains('unauthorized')) {
+            _token = null;
+            _currentUser = null;
+            removeStorageString('auth_token');
+            removeStorageString('auth_user');
+          }
+          // If it was a network hiccup or server startup lag, preserve the cached session
         }
       }
     } finally {

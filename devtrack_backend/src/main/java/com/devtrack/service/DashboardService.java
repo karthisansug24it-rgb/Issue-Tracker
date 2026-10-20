@@ -86,8 +86,12 @@ public class DashboardService {
             boolean isLead = user.getId().equals(t.getTeamLeadId());
             boolean isMember = teamMemberRepository.findByTeamIdAndUserId(t.getId(), user.getId()).isPresent();
 
-            // Include if user is assigned to the team OR if user is Super Admin / Admin
-            if (isManager || isLead || isMember || user.getRole() == com.devtrack.model.RoleType.SUPER_ADMIN || user.getRole() == com.devtrack.model.RoleType.ADMIN) {
+            // Include if user is assigned to the team OR if user is Super Admin / Admin / Manager
+            boolean isManagementRole = user.getRole() == com.devtrack.model.RoleType.SUPER_ADMIN
+                    || user.getRole() == com.devtrack.model.RoleType.ADMIN
+                    || user.getRole() == com.devtrack.model.RoleType.MANAGER;
+
+            if (isManager || isLead || isMember || isManagementRole) {
                 Map<String, Object> summary = new HashMap<>();
                 summary.put("id", t.getId());
                 summary.put("name", t.getName());
@@ -118,6 +122,7 @@ public class DashboardService {
                 if (isManager) roleInTeam = "Team Manager";
                 else if (isLead) roleInTeam = "Team Lead";
                 else if (isMember) roleInTeam = "Member";
+                else if (user.getRole() == com.devtrack.model.RoleType.MANAGER) roleInTeam = "Manager Oversight";
                 else if (user.getRole() == com.devtrack.model.RoleType.SUPER_ADMIN || user.getRole() == com.devtrack.model.RoleType.ADMIN) roleInTeam = "Admin Oversight";
                 summary.put("userRoleInTeam", roleInTeam);
 

@@ -39,20 +39,26 @@ class _IssuesScreenState extends State<IssuesScreen> {
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
-    final projects = await ApiService.instance.getProjects();
-    final issues = await ApiService.instance.getIssues(
-      projectId: _selectedProjectId,
-      status: _selectedStatus == 'ALL' ? null : _selectedStatus,
-      priority: _selectedPriority == 'ALL' ? null : _selectedPriority,
-    );
-    final users = await ApiService.instance.getUsers();
-    if (mounted) {
-      setState(() {
-        _projects = projects;
-        _issues = issues;
-        _users = users;
-        _isLoading = false;
-      });
+    try {
+      final projects = await ApiService.instance.getProjects();
+      final issues = await ApiService.instance.getIssues(
+        projectId: _selectedProjectId,
+        status: _selectedStatus == 'ALL' ? null : _selectedStatus,
+        priority: _selectedPriority == 'ALL' ? null : _selectedPriority,
+      );
+      final users = await ApiService.instance.getUsers();
+      if (mounted) {
+        setState(() {
+          _projects = projects;
+          _issues = issues;
+          _users = users;
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 

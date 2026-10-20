@@ -74,6 +74,28 @@ public class DataLoader implements CommandLineRunner {
             System.out.println("Team Lead verified/created: suresh.lead@devtrack.com / password123");
         }
 
+        // Ensure user karthisan (vskarthisan@gmail.com) is a MANAGER with password123
+        userRepository.findByEmail("vskarthisan@gmail.com").ifPresentOrElse(u -> {
+            boolean modified = false;
+            if (u.getRole() != RoleType.MANAGER) {
+                u.setRole(RoleType.MANAGER);
+                modified = true;
+            }
+            if (u.getPassword() == null || !passwordEncoder.matches("password123", u.getPassword())) {
+                u.setPassword(passwordEncoder.encode("password123"));
+                modified = true;
+            }
+            if (modified) {
+                userRepository.save(u);
+                System.out.println("Verified/Updated vskarthisan@gmail.com role to MANAGER and password to password123");
+            }
+        }, () -> {
+            User karthi = new User(null, "karthisan", "vskarthisan@gmail.com",
+                    passwordEncoder.encode("password123"), RoleType.MANAGER, "Engineering", "Engineering Manager");
+            userRepository.save(karthi);
+            System.out.println("Created initial MANAGER account: vskarthisan@gmail.com / password123");
+        });
+
         // Backfill managerId and teamLeadId for any existing teams
         User managerArun = userRepository.findByEmail("arun.manager@devtrack.com").orElse(null);
         if (managerArun != null && leadSuresh != null) {

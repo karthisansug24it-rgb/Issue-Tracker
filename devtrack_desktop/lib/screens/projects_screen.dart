@@ -31,12 +31,18 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
 
   Future<void> _loadProjects() async {
     setState(() => _isLoading = true);
-    final projects = await ApiService.instance.getProjects();
-    if (mounted) {
-      setState(() {
-        _projects = projects;
-        _isLoading = false;
-      });
+    try {
+      final projects = await ApiService.instance.getProjects();
+      if (mounted) {
+        setState(() {
+          _projects = projects;
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 

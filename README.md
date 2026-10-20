@@ -95,26 +95,45 @@ cd devtrack_backend
 - **PostgreSQL Database**: With `SPRING_PROFILES_ACTIVE=postgres` in `.env`, Spring Boot connects to PostgreSQL and automatically verifies/updates all tables.
 - **DBeaver Inspection**: The full DDL schema is provided in `devtrack_backend/src/main/resources/schema.sql`.
 
-### 3. Running the Flutter App (Desktop & Web)
+### 3. Running with 1-Click Launch Scripts (Windows)
 
-```bash
-cd devtrack_desktop
-flutter run -d windows
-```
+Convenient one-click `.bat` scripts are provided in the project root:
 
-- **Instant Role Switcher**: The top navigation bar includes an instant role switcher dropdown (`Super Admin`, `Admin`, `Manager`, `Employee`) so you can test all permissions and dashboards immediately!
-- **Dual Support**: Seamlessly calls `http://localhost:8080/api/v1`. If backend is not yet started, it gracefully uses local seed data so you can test and present without delays.
+- **`run_backend.bat`**: Launches the Spring Boot backend service on port 8080 using Maven Wrapper.
+- **`run_web.bat`**: Launches the Flutter Web application locked to fixed port `3000` (`flutter run -d chrome --web-port=3000`). Using a fixed port preserves browser `localStorage` credentials and session cache permanently across restarts.
+- **`run_desktop.bat`**: Launches the Flutter Windows native desktop application.
+
+### 4. Running via VS Code / IDE
+
+A ready-to-use `.vscode/launch.json` is configured with:
+- **DevTrack Web (Fixed Port 3000)**: Launches Chrome on `http://localhost:3000`.
+- **DevTrack Desktop (Windows)**: Launches Windows desktop binary.
+- **DevTrack Backend (Spring Boot)**: Debugs Java backend in IDE.
+
+### 5. Demo Accounts & Credentials
+
+Reference credentials for each role hierarchy level:
+- **Super Admin**: `superadmin@devtrack.com` / `admin123`
+- **Admin**: `admin@devtrack.com` / `admin123`
+- **Manager (Karthisan)**: `vskarthisan@gmail.com` / `password123`
+- **Manager (Arun)**: `arun.manager@devtrack.com` / `password123`
+- **Team Lead (Suresh)**: `suresh.lead@devtrack.com` / `password123`
+- **Developer (Karthi)**: `karthi.dev@devtrack.com` / `password123`
 
 ---
 
 ## 💡 Simple & Explainable Design Decisions
 
-1. **No Complicated Heavy Libraries**:
+1. **Fixed Web Port (3000) for Stable Sessions**:
+   - Web browsers isolate `localStorage` by origin (host + port). By locking Flutter Web to port 3000, user sessions never reset or disappear between app launches.
+2. **Robust Desktop Cache**:
+   - Desktop sessions are persistently stored in `%LOCALAPPDATA%/DevTrack/session_cache.json` and resilient against backend restarts.
+3. **No Complicated Heavy Libraries**:
    - Backend uses pure, standard Spring Boot starters (Spring Web, Spring Security, Spring Data JPA).
    - Frontend uses standard Flutter widgets and pure `http` without complex reactive frameworks.
-2. **Clean Normal UI**:
+4. **Clean Normal UI**:
    - Clean, professional desktop layout with a standard left navigation rail, readable typography, clear status chips, and intuitive dialogs.
-3. **100% Verified**:
+5. **100% Verified**:
    - Backend compiled with `release 17` with zero errors.
    - Flutter desktop app analyzed with `flutter analyze` with 0 issues.
-   - All Flutter widget tests passed.
+

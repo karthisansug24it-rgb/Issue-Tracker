@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../services/auth_state.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  final String? redirectNotice;
+
+  const LoginScreen({super.key, this.redirectNotice});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -14,6 +16,14 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
   String? _errorMessage;
   String? _successMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.redirectNotice != null) {
+      _errorMessage = widget.redirectNotice;
+    }
+  }
 
   // Sign In / Common Controllers
   final _emailController = TextEditingController();

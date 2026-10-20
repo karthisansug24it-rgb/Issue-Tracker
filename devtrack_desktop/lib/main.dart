@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'services/auth_state.dart';
+import 'services/app_router.dart';
+import 'utils/url_helper.dart';
 import 'screens/main_layout.dart';
 import 'screens/login_screen.dart';
 
@@ -25,10 +27,32 @@ class DevTrackApp extends StatefulWidget {
 }
 
 class _DevTrackAppState extends State<DevTrackApp> {
+  String? _denialNotice;
+  int _initialTabIndex = 0;
+
   @override
   void initState() {
     super.initState();
     AuthState.instance.addListener(_handleAuthChange);
+    _evaluateRoute();
+  }
+
+  void _evaluateRoute() {
+    final location = getBrowserLocation();
+    final user = AuthState.instance.currentUser;
+    if (user != null) {
+      final result = AppRouter.verifyRoute(location, user);
+      _initialTabIndex = result.initialTabIndex;
+      if (!result.isAllowed) {
+        _denialNotice = result.denialMessage;
+        setBrowserUrl(result.resolvedPath);
+      }
+    } else if (!AuthState.instance.isInitializing) {
+      if (location != '/' && location != '/login' && location != '') {
+        _denialNotice = 'Authentication required. Please sign in to access DevTrack.';
+        setBrowserUrl('/login');
+      }
+    }
   }
 
   @override
@@ -38,6 +62,7 @@ class _DevTrackAppState extends State<DevTrackApp> {
   }
 
   void _handleAuthChange() {
+    _evaluateRoute();
     setState(() {});
   }
 
@@ -72,8 +97,11 @@ class _DevTrackAppState extends State<DevTrackApp> {
               ),
             )
           : (AuthState.instance.isLoggedIn
-              ? const MainLayout()
-              : const LoginScreen()),
+              ? MainLayout(
+                  initialTabIndex: _initialTabIndex,
+                  denialNotice: _denialNotice,
+                )
+              : LoginScreen(redirectNotice: _denialNotice)),
     );
   }
 }

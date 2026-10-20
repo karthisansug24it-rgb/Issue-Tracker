@@ -35,7 +35,7 @@ public class ProjectService {
     public List<ProjectDto> getProjectsForUser(User user) {
         List<Project> projects;
 
-        if (user.getRole() == RoleType.SUPER_ADMIN || user.getRole() == RoleType.ADMIN) {
+        if (user.getRole() == RoleType.SUPER_ADMIN || user.getRole() == RoleType.ADMIN || user.getRole() == RoleType.MANAGER) {
             projects = projectRepository.findAll();
         } else {
             // Projects where user is owner or member

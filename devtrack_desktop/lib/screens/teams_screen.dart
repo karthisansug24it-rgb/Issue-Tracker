@@ -51,19 +51,6 @@ class _TeamsScreenState extends State<TeamsScreen> {
         _teams = teams;
         _users = users;
         _isLoading = false;
-
-        // If the logged-in user is an Admin (not Super Admin) and hasn't selected a dept yet,
-        // scope by their department
-        final currentUser = AuthState.instance.currentUser;
-        if (_selectedDepartmentId == null && currentUser != null && !AuthState.instance.isSuperAdmin) {
-          final matchingDept = _departments.firstWhere(
-            (d) => d.name.toLowerCase() == currentUser.department.toLowerCase(),
-            orElse: () => _departments.isNotEmpty ? _departments.first : DepartmentModel(id: 0, name: '', code: ''),
-          );
-          if (matchingDept.id != 0) {
-            _selectedDepartmentId = matchingDept.id;
-          }
-        }
       });
     } catch (e) {
       if (!mounted) return;
@@ -118,7 +105,6 @@ class _TeamsScreenState extends State<TeamsScreen> {
         _selectedDepartmentId ??
         (_departments.isNotEmpty ? _departments.first.id : 1);
     int? selectedManagerId = team?.managerId;
-    int? selectedTeamLeadId = team?.teamLeadId;
 
     await showDialog(
       context: context,
@@ -134,11 +120,6 @@ class _TeamsScreenState extends State<TeamsScreen> {
                 return u.role == 'MANAGER';
               }
               return u.role == 'MANAGER' || u.role == 'ADMIN' || u.role == 'SUPER_ADMIN';
-            }).toList();
-
-            // Team Lead candidates: TEAM_LEAD, EMPLOYEE, or MANAGER
-            final leadCandidates = activeUsers.where((u) {
-              return u.role == 'TEAM_LEAD' || u.role == 'EMPLOYEE' || u.role == 'MANAGER';
             }).toList();
 
             return AlertDialog(
@@ -224,13 +205,13 @@ class _TeamsScreenState extends State<TeamsScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      // 1. Assign Manager
+                      // Assign Manager (Super Admin assigns Manager alone)
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Row(
                             children: [
-                              const Text('1. Assign Manager', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                              const Text('Assign Manager', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                               const SizedBox(width: 6),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -292,74 +273,6 @@ class _TeamsScreenState extends State<TeamsScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      // 2. Assign Team Lead
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              const Text('2. Assign Team Lead', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.teal.shade50,
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(color: Colors.teal.shade200),
-                                ),
-                                child: Text('Technical Lead & Triage', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.teal.shade900)),
-                              ),
-                            ],
-                          ),
-                          if (selectedTeamLeadId != null)
-                            TextButton(
-                              style: TextButton.styleFrom(visualDensity: VisualDensity.compact, padding: EdgeInsets.zero),
-                              onPressed: () => setDialogState(() => selectedTeamLeadId = null),
-                              child: const Text('Clear', style: TextStyle(fontSize: 12, color: Colors.red)),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      DropdownButtonFormField<int?>(
-                        initialValue: leadCandidates.any((u) => u.id == selectedTeamLeadId) ? selectedTeamLeadId : null,
-                        isExpanded: true,
-                        hint: const Text('Select Team Lead (Sprint guide & Reviews)', style: TextStyle(fontSize: 13)),
-                        decoration: InputDecoration(
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          isDense: true,
-                        ),
-                        items: [
-                          const DropdownMenuItem<int?>(
-                            value: null,
-                            child: Text('Unassigned (Assign later)', style: TextStyle(fontSize: 13, color: Colors.grey)),
-                          ),
-                          ...leadCandidates.map((u) {
-                            return DropdownMenuItem<int?>(
-                              value: u.id,
-                              child: Row(
-                                children: [
-                                  Text(u.fullName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                                  const SizedBox(width: 8),
-                                  Chip(
-                                    label: Text(u.role, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold)),
-                                    padding: EdgeInsets.zero,
-                                    visualDensity: VisualDensity.compact,
-                                    backgroundColor: Colors.teal.shade100,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text('· ${u.jobTitle}', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
-                                ],
-                              ),
-                            );
-                          }),
-                        ],
-                        onChanged: (val) {
-                          setDialogState(() => selectedTeamLeadId = val);
-                        },
-                      ),
-                      const SizedBox(height: 16),
-
                       // Description
                       const Text('Description', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                       const SizedBox(height: 6),
@@ -409,7 +322,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
                           departmentId: selectedDeptId,
                           description: descController.text.trim(),
                           managerId: selectedManagerId,
-                          teamLeadId: selectedTeamLeadId,
+                          teamLeadId: team.teamLeadId,
                           active: team.active,
                         );
                         if (!mounted) return;
@@ -422,7 +335,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
                           departmentId: selectedDeptId,
                           description: descController.text.trim(),
                           managerId: selectedManagerId,
-                          teamLeadId: selectedTeamLeadId,
+                          teamLeadId: null,
                         );
                         if (!mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -1153,6 +1066,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
   @override
   Widget build(BuildContext context) {
     final isAdminOrSuper = AuthState.instance.isAdmin;
+    final canManageTeams = AuthState.instance.isManager || isAdminOrSuper;
     final currentUser = AuthState.instance.currentUser;
     final isScopedAdmin = !AuthState.instance.isSuperAdmin && currentUser != null && currentUser.department.isNotEmpty;
 
@@ -1235,6 +1149,8 @@ class _TeamsScreenState extends State<TeamsScreen> {
                             ),
                             onPressed: () => _showDepartmentDialog(),
                           ),
+                        ],
+                        if (canManageTeams) ...[
                           ElevatedButton.icon(
                             icon: const Icon(Icons.group_add, size: 16),
                             label: Text(isMobile ? 'Group' : 'Create Team / Group'),
@@ -1411,7 +1327,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
                       : isCompact
                           ? (_activeTab == 'DEPARTMENTS'
                               ? _buildDepartmentsCard(isAdminOrSuper)
-                              : _buildGroupsCard(isAdminOrSuper, isMobile))
+                              : _buildGroupsCard(canManageTeams, isAdminOrSuper, isMobile))
                           : Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -1421,7 +1337,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
                                 ),
                                 const SizedBox(width: 16),
                                 Expanded(
-                                  child: _buildGroupsCard(isAdminOrSuper, isMobile),
+                                  child: _buildGroupsCard(canManageTeams, isAdminOrSuper, isMobile),
                                 ),
                               ],
                             ),
@@ -1460,10 +1376,32 @@ class _TeamsScreenState extends State<TeamsScreen> {
             const SizedBox(height: 12),
             Expanded(
               child: ListView.separated(
-                itemCount: _departments.length,
+                itemCount: _departments.length + 1,
                 separatorBuilder: (context, _) => const Divider(height: 1),
                 itemBuilder: (context, idx) {
-                  final dept = _departments[idx];
+                  if (idx == 0) {
+                    final isAll = _selectedDepartmentId == null;
+                    return ListTile(
+                      selected: isAll,
+                      selectedTileColor: Colors.blue.shade50,
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      title: Text(
+                        'All Departments',
+                        style: TextStyle(fontWeight: isAll ? FontWeight.bold : FontWeight.w600, fontSize: 13),
+                      ),
+                      subtitle: Text('${_teams.length} total active groups', style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
+                      trailing: const Icon(Icons.arrow_forward_ios, size: 12, color: Colors.grey),
+                      onTap: () {
+                        setState(() {
+                          _selectedDepartmentId = null;
+                          _activeTab = 'GROUPS';
+                        });
+                      },
+                    );
+                  }
+
+                  final dept = _departments[idx - 1];
                   final isSelected = _selectedDepartmentId == dept.id;
                   final teamCount = _teams.where((t) => t.departmentId == dept.id).length;
 
@@ -1523,7 +1461,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
     );
   }
 
-  Widget _buildGroupsCard(bool isAdminOrSuper, bool isMobile) {
+  Widget _buildGroupsCard(bool canManageTeams, bool isAdminOrSuper, bool isMobile) {
     return Card(
       elevation: 1,
       shape: RoundedRectangleBorder(
@@ -1547,7 +1485,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
                       : 'Groups in ${_departments.firstWhere((d) => d.id == _selectedDepartmentId, orElse: () => DepartmentModel(id: 0, name: 'Selected Dept', code: '')).name} (${_filteredTeams.length})',
                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
-                if (isAdminOrSuper)
+                if (canManageTeams)
                   TextButton.icon(
                     icon: const Icon(Icons.add, size: 16),
                     label: Text(
@@ -1575,7 +1513,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
                             style: TextStyle(color: Colors.grey.shade600),
                           ),
                           const SizedBox(height: 12),
-                          if (isAdminOrSuper)
+                          if (canManageTeams)
                             ElevatedButton.icon(
                               icon: const Icon(Icons.group_add, size: 16),
                               label: const Text('Create New Group / Team'),
@@ -1731,7 +1669,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
                                         constraints: const BoxConstraints(),
                                         onPressed: () => ClipboardHelper.copy(context, team.teamLeadName!, label: 'Team Lead'),
                                       ),
-                                    if (isAdminOrSuper)
+                                    if (AuthState.instance.isManager)
                                       InkWell(
                                         onTap: () => _showQuickAssignLeadDialog(team),
                                         borderRadius: BorderRadius.circular(4),
