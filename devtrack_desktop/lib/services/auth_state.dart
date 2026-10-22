@@ -7,7 +7,31 @@ import 'api_service.dart';
 class AuthState extends ChangeNotifier {
   static final AuthState instance = AuthState._internal();
   AuthState._internal() {
-    _restoreSession();
+    _loadFromStorage();
+    if (_token != null && _token!.isNotEmpty) {
+      Future.microtask(_restoreSession);
+    }
+  }
+
+  void _loadFromStorage() {
+    try {
+      final savedToken = getStorageString('auth_token');
+      if (savedToken != null && savedToken.isNotEmpty) {
+        _token = savedToken;
+        final savedUser = getStorageString('auth_user');
+        if (savedUser != null && savedUser.isNotEmpty) {
+          _currentUser = UserModel.fromJson(jsonDecode(savedUser));
+        }
+        final savedPerms = getStorageString('auth_permissions');
+        if (savedPerms != null && savedPerms.isNotEmpty) {
+          _permissions = List<String>.from(jsonDecode(savedPerms));
+        }
+      } else {
+        _isInitializing = false;
+      }
+    } catch (_) {
+      _isInitializing = false;
+    }
   }
 
   UserModel? _currentUser;
@@ -38,7 +62,8 @@ class AuthState extends ChangeNotifier {
   bool get isEmployee => _currentUser?.role == 'EMPLOYEE';
 
   /// Permission names come from the server (see RolePermissions.java).
-  bool hasPermission(String permission) => _permissions.contains(permission);
+  bool hasPermission(String permission) =>
+      isSuperAdmin || _permissions.contains(permission);
 
   void _applyUserInfo(Map<String, dynamic> info) {
     _currentUser = UserModel(
@@ -71,20 +96,7 @@ class AuthState extends ChangeNotifier {
 
   Future<void> _restoreSession() async {
     try {
-      final savedToken = getStorageString('auth_token');
-      if (savedToken == null || savedToken.isEmpty) return;
-
-      _token = savedToken;
-      try {
-        final savedUser = getStorageString('auth_user');
-        if (savedUser != null && savedUser.isNotEmpty) {
-          _currentUser = UserModel.fromJson(jsonDecode(savedUser));
-        }
-        final savedPerms = getStorageString('auth_permissions');
-        if (savedPerms != null && savedPerms.isNotEmpty) {
-          _permissions = List<String>.from(jsonDecode(savedPerms));
-        }
-      } catch (_) {}
+      if (_token == null || _token!.isEmpty) return;
 
       // Refresh role and permissions from the server (they may have changed)
       try {
