@@ -50,7 +50,7 @@ class AccessControlIntegrationTest {
     // ------------------------------------------------------------------ helpers
 
     String token(String email) throws Exception {
-        String password = email.equals(SUPER) || email.equals(ADMIN) ? "admin123" : "password123";
+        String password = "qwerty123";
         String body = mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"" + email + "\",\"password\":\"" + password + "\"}"))
                 .andExpect(status().isOk())
@@ -287,7 +287,7 @@ class AccessControlIntegrationTest {
     void disabledUserCannotSignIn() throws Exception {
         as(SUPER, patch("/api/v1/users/" + userId(PRIYA) + "/status")).andExpect(status().isOk());
         mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"" + PRIYA + "\",\"password\":\"password123\"}"))
+                        .content("{\"email\":\"" + PRIYA + "\",\"password\":\"qwerty123\"}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.message", containsString("disabled")));
     }

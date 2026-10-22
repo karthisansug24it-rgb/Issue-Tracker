@@ -1,11 +1,10 @@
 -- ====================================================================
 -- DEVTRACK - Hierarchy-Based Issue Tracking & Project Management Schema
--- Database: PostgreSQL 18
--- Compatible with DBeaver SQL Editor
+-- Database: PostgreSQL 14+ / 15 / 16 / 17 / 18
+-- Compatible with DBeaver SQL Editor, pgAdmin, and psql CLI
 --
--- Reference DDL only. The application does not execute this file
--- (spring.sql.init.mode=never); Hibernate keeps the tables up to date.
--- The first Super Admin is created by DataLoader, never by this script.
+-- All default seed users have password: qwerty123
+-- BCrypt Hash: $2a$10$QWp5.GktNP3yVOzLHKQPvujiCPw.4zUiprUfZe0xjQc2ZQ085F27m
 -- ====================================================================
 
 -- 1. USERS TABLE
@@ -167,9 +166,48 @@ CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status);
 CREATE INDEX IF NOT EXISTS idx_issues_priority ON issues(priority);
 CREATE INDEX IF NOT EXISTS idx_project_members_user ON project_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON notifications(recipient_id);
-
 CREATE INDEX IF NOT EXISTS idx_users_department ON users(department_id);
 
--- Link users to departments (users is created before departments above)
+-- Foreign key for user department
 ALTER TABLE users DROP CONSTRAINT IF EXISTS fk_users_department;
 ALTER TABLE users ADD CONSTRAINT fk_users_department FOREIGN KEY (department_id) REFERENCES departments(id);
+
+-- ====================================================================
+-- TEAMMATE SETUP & INITIAL SEED DATA
+-- Default password for all seed accounts below: qwerty123
+-- ====================================================================
+
+-- Departments
+INSERT INTO departments (id, name, code, description, active) VALUES
+(1, 'Engineering', 'ENG', 'Software engineering and development', true),
+(2, 'Quality Assurance', 'QA', 'Software quality and testing', true),
+(3, 'Operations & Support', 'OPS', 'Production operations and support', true)
+ON CONFLICT (code) DO NOTHING;
+
+-- Initial Teammate Accounts (BCrypt hash matches: qwerty123)
+INSERT INTO users (id, full_name, email, password, role, department, department_id, job_title, active) VALUES
+(1, 'Super Admin', 'superadmin@devtrack.com', '$2a$10$QWp5.GktNP3yVOzLHKQPvujiCPw.4zUiprUfZe0xjQc2ZQ085F27m', 'SUPER_ADMIN', 'Executive', NULL, 'System Super Admin', true),
+(2, 'Suresh Lead', 'suresh.lead@devtrack.com', '$2a$10$QWp5.GktNP3yVOzLHKQPvujiCPw.4zUiprUfZe0xjQc2ZQ085F27m', 'TEAM_LEAD', 'Engineering', 1, 'Senior Tech Lead', true),
+(3, 'Divya Admin', 'admin@devtrack.com', '$2a$10$QWp5.GktNP3yVOzLHKQPvujiCPw.4zUiprUfZe0xjQc2ZQ085F27m', 'ADMIN', 'Operations', 3, 'Organization Admin', true),
+(4, 'Arun Kumar', 'arun.manager@devtrack.com', '$2a$10$QWp5.GktNP3yVOzLHKQPvujiCPw.4zUiprUfZe0xjQc2ZQ085F27m', 'MANAGER', 'Engineering', 1, 'Engineering Manager', true),
+(5, 'Karthi Raman', 'karthi.dev@devtrack.com', '$2a$10$QWp5.GktNP3yVOzLHKQPvujiCPw.4zUiprUfZe0xjQc2ZQ085F27m', 'EMPLOYEE', 'Engineering', 1, 'Full Stack Engineer', true),
+(6, 'Priya Sharma', 'priya.dev@devtrack.com', '$2a$10$QWp5.GktNP3yVOzLHKQPvujiCPw.4zUiprUfZe0xjQc2ZQ085F27m', 'EMPLOYEE', 'Engineering', 1, 'Backend Engineer', true),
+(7, 'Vijay Tester', 'vijay.qa@devtrack.com', '$2a$10$QWp5.GktNP3yVOzLHKQPvujiCPw.4zUiprUfZe0xjQc2ZQ085F27m', 'EMPLOYEE', 'Quality Assurance', 2, 'QA Automation Engineer', true)
+ON CONFLICT (email) DO NOTHING;
+
+-- Sync sequences with highest IDs
+SELECT setval('departments_id_seq', (SELECT COALESCE(MAX(id), 1) FROM departments));
+SELECT setval('users_id_seq', (SELECT COALESCE(MAX(id), 1) FROM users));
+
+-- ====================================================================
+-- USEFUL CHEAT SHEET QUERIES FOR TEAMMATES:
+--
+-- 1. Reset ALL users' password to qwerty123:
+--    UPDATE users SET password = '$2a$10$QWp5.GktNP3yVOzLHKQPvujiCPw.4zUiprUfZe0xjQc2ZQ085F27m';
+--
+-- 2. Unlock or activate all accounts:
+--    UPDATE users SET active = true;
+--
+-- 3. Check all existing users:
+--    SELECT id, full_name, email, role, department, active FROM users ORDER BY id;
+-- ====================================================================

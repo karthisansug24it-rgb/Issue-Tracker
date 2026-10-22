@@ -30,8 +30,8 @@ public class DataLoader implements CommandLineRunner {
     private static final Logger log = LoggerFactory.getLogger(DataLoader.class);
 
     // Demo accounts (documented in README). Only created when demo data is enabled.
-    private static final String DEMO_PASSWORD = "password123";
-    private static final String DEMO_ADMIN_PASSWORD = "admin123";
+    private static final String DEMO_PASSWORD = "qwerty123";
+    private static final String DEMO_ADMIN_PASSWORD = "qwerty123";
 
     private final UserRepository userRepository;
     private final DepartmentRepository departmentRepository;
