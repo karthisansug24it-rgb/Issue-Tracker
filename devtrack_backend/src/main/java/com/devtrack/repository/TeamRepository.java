@@ -10,4 +10,6 @@ import java.util.List;
 public interface TeamRepository extends JpaRepository<Team, Long> {
     List<Team> findByDepartmentId(Long departmentId);
     List<Team> findByTeamLeadId(Long teamLeadId);
+    List<Team> findByManagerId(Long managerId);
+    boolean existsByDepartmentId(Long departmentId);
 }

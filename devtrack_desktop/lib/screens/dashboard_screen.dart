@@ -17,69 +17,67 @@ class _DashboardScreenState extends State<DashboardScreen> {
   DashboardMetricsModel? _metrics;
   List<IssueModel> _recentIssues = [];
   bool _isLoading = true;
+  String? _loadError;
 
   @override
   void initState() {
     super.initState();
     _loadData();
-    AuthState.instance.addListener(_loadData);
+    AuthState.instance.addListener(_onAuthChanged);
   }
 
   @override
   void dispose() {
-    AuthState.instance.removeListener(_loadData);
+    AuthState.instance.removeListener(_onAuthChanged);
     super.dispose();
   }
 
+  void _onAuthChanged() {
+    if (AuthState.instance.isLoggedIn) _loadData();
+  }
+
   Future<void> _loadData() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
     try {
       final metrics = await ApiService.instance.getDashboardMetrics();
       final issues = await ApiService.instance.getIssues();
-      if (mounted) {
-        setState(() {
-          _metrics = metrics;
-          _recentIssues = issues.take(5).toList();
-          _isLoading = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (!mounted) return;
+      setState(() {
+        _metrics = metrics;
+        _recentIssues = issues.take(5).toList();
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _loadError = e.toString();
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final user = AuthState.instance.currentUser;
-    if (user == null || _isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_metrics == null) {
+    if (_loadError != null) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.cloud_off, size: 48, color: Colors.blueGrey),
+            Icon(Icons.cloud_off, size: 48, color: Colors.red.shade300),
+            const SizedBox(height: 8),
+            Text(_loadError!, textAlign: TextAlign.center),
             const SizedBox(height: 12),
-            const Text('Unable to load dashboard metrics', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 6),
-            const Text('Ensure the backend service is running on port 8080.', style: TextStyle(color: Colors.grey, fontSize: 13)),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: _loadData,
-              icon: const Icon(Icons.refresh, size: 18),
-              label: const Text('Retry Connection'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1E40AF),
-                foregroundColor: Colors.white,
-              ),
-            ),
+            OutlinedButton.icon(onPressed: _loadData, icon: const Icon(Icons.refresh), label: const Text('Retry')),
           ],
         ),
       );
+    }
+    if (user == null || _isLoading || _metrics == null) {
+      return const Center(child: CircularProgressIndicator());
     }
 
     return LayoutBuilder(
@@ -184,21 +182,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     }
                   }, width: statCardWidth),
                   _buildStatCard('Total Issues', '${_metrics!.totalIssues}', Icons.assignment_outlined, Colors.blueGrey, () => widget.onNavigateToTab(2), width: statCardWidth),
-                  _buildStatCard('Open / Assigned', '${_metrics!.openIssues}', Icons.hourglass_empty, Colors.orange, () => widget.onNavigateToTab(2), width: statCardWidth),
+                  _buildStatCard('Open / Not Started', '${_metrics!.openIssues}', Icons.hourglass_empty, Colors.orange, () => widget.onNavigateToTab(2), width: statCardWidth),
                   _buildStatCard('In Progress', '${_metrics!.inProgressIssues}', Icons.trending_up, Colors.blue, () => widget.onNavigateToTab(2), width: statCardWidth),
                   _buildStatCard('In Review', '${_metrics!.inReviewIssues}', Icons.rate_review_outlined, Colors.purple, () => widget.onNavigateToTab(2), width: statCardWidth),
                   _buildStatCard('Resolved / Closed', '${_metrics!.resolvedIssues + _metrics!.closedIssues}', Icons.check_circle_outline, Colors.green, () => widget.onNavigateToTab(2), width: statCardWidth),
-                  _buildStatCard('Critical Priority', '${_metrics!.criticalIssues}', Icons.warning_amber_rounded, Colors.red, () => widget.onNavigateToTab(2), width: statCardWidth),
-                  if (AuthState.instance.isManager || AuthState.instance.isAdmin)
-                    _buildStatCard('Total Users', '${_metrics!.totalUsers}', Icons.people_outline, Colors.deepPurple, () {
-                      widget.onNavigateToTab(4);
-                    }, width: statCardWidth),
+                  _buildStatCard('Critical (Unresolved)', '${_metrics!.criticalIssues}', Icons.warning_amber_rounded, Colors.red, () => widget.onNavigateToTab(2), width: statCardWidth),
                 ],
               ),
               const SizedBox(height: 24),
 
               // Role Specific Focus Section (Responsive Cards - Fixes 38px/33px/77px overflows)
-              if (user.role == 'EMPLOYEE' || user.role == 'TEAM_LEAD' || user.role == 'MANAGER' || (_metrics!.myAssignedIssues > 0)) ...[
+              if (user.role == 'EMPLOYEE' || user.role == 'TEAM_LEAD') ...[
                 const Text('My Assigned Work', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 12),
                 Builder(
@@ -214,15 +208,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       children: [
                         SizedBox(
                           width: myWorkCardWidth,
-                          child: _buildSmallStatCard('My Open Tasks', '${_metrics!.myTasks}', Icons.task_alt, Colors.blue, onTap: () => widget.onNavigateToTab(2)),
+                          child: _buildSmallStatCard('My Open Tasks', '${_metrics!.myTasks}', Icons.task_alt, Colors.blue),
                         ),
                         SizedBox(
                           width: myWorkCardWidth,
-                          child: _buildSmallStatCard('My Open Bugs', '${_metrics!.myBugs}', Icons.bug_report, Colors.red, onTap: () => widget.onNavigateToTab(2)),
+                          child: _buildSmallStatCard('My Open Bugs', '${_metrics!.myBugs}', Icons.bug_report, Colors.red),
                         ),
                         SizedBox(
                           width: myWorkCardWidth,
-                          child: _buildSmallStatCard('Total Assigned to Me', '${_metrics!.myAssignedIssues}', Icons.assignment_ind, Colors.green, onTap: () => widget.onNavigateToTab(2)),
+                          child: _buildSmallStatCard('Total Assigned to Me', '${_metrics!.myAssignedIssues}', Icons.assignment_ind, Colors.green),
                         ),
                       ],
                     );
@@ -758,49 +752,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildSmallStatCard(String title, String count, IconData icon, MaterialColor color, {VoidCallback? onTap}) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: color.shade50,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.shade200),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Icon(icon, color: color.shade700, size: 20),
+  Widget _buildSmallStatCard(String title, String count, IconData icon, MaterialColor color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: color.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.shade200),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(6),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(fontWeight: FontWeight.w600, color: color.shade900, fontSize: 13),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    count,
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color.shade700),
-                  ),
-                ],
-              ),
+            child: Icon(icon, color: color.shade700, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(fontWeight: FontWeight.w600, color: color.shade900, fontSize: 13),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  count,
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color.shade700),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

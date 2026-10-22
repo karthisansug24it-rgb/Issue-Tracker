@@ -29,6 +29,7 @@ public class UserDto {
         dto.setAvatarUrl(user.getAvatarUrl());
         dto.setActive(user.isActive());
         dto.setCreatedAt(user.getCreatedAt());
+        dto.setDepartmentId(user.getDepartmentId());
         return dto;
     }
 
@@ -58,4 +59,14 @@ public class UserDto {
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+    private Long departmentId;
+    // Whether the requesting user may change this account's role / status
+    private boolean canModify;
+
+    public Long getDepartmentId() { return departmentId; }
+    public void setDepartmentId(Long departmentId) { this.departmentId = departmentId; }
+
+    public boolean isCanModify() { return canModify; }
+    public void setCanModify(boolean canModify) { this.canModify = canModify; }
 }

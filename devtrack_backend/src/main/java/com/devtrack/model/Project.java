@@ -29,6 +29,9 @@ public class Project {
     private LocalDate startDate;
     private LocalDate targetEndDate;
 
+    // Next number used when generating issue keys (e.g. WEB-104). Guarded by a row lock.
+    private Integer nextIssueNumber;
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -78,6 +81,9 @@ public class Project {
 
     public LocalDate getTargetEndDate() { return targetEndDate; }
     public void setTargetEndDate(LocalDate targetEndDate) { this.targetEndDate = targetEndDate; }
+
+    public Integer getNextIssueNumber() { return nextIssueNumber; }
+    public void setNextIssueNumber(Integer nextIssueNumber) { this.nextIssueNumber = nextIssueNumber; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

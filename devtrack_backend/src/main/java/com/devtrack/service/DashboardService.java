@@ -1,19 +1,24 @@
 package com.devtrack.service;
 
 import com.devtrack.dto.DashboardMetricsDto;
-import com.devtrack.model.Issue;
-import com.devtrack.model.IssuePriority;
-import com.devtrack.model.IssueStatus;
-import com.devtrack.model.IssueType;
-import com.devtrack.model.User;
+import com.devtrack.model.*;
 import com.devtrack.repository.*;
+import com.devtrack.security.AccessService;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
+/**
+ * Dashboard numbers are scoped to what the user can see: admins get organisation-wide
+ * figures, everyone else only the projects they belong to.
+ *
+ * Definitions used everywhere:
+ *  - open      = OPEN, ASSIGNED or REOPENED (not started)
+ *  - unresolved = anything except RESOLVED / CLOSED
+ *  - critical / overdue only count unresolved issues
+ */
 @Service
 public class DashboardService {
 
@@ -23,114 +28,131 @@ public class DashboardService {
     private final TeamRepository teamRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final DepartmentRepository departmentRepository;
+    private final ProjectMemberRepository projectMemberRepository;
+    private final AccessService accessService;
 
     public DashboardService(UserRepository userRepository,
                             ProjectRepository projectRepository,
                             IssueRepository issueRepository,
                             TeamRepository teamRepository,
                             TeamMemberRepository teamMemberRepository,
-                            DepartmentRepository departmentRepository) {
+                            DepartmentRepository departmentRepository,
+                            ProjectMemberRepository projectMemberRepository,
+                            AccessService accessService) {
         this.userRepository = userRepository;
         this.projectRepository = projectRepository;
         this.issueRepository = issueRepository;
         this.teamRepository = teamRepository;
         this.teamMemberRepository = teamMemberRepository;
         this.departmentRepository = departmentRepository;
+        this.projectMemberRepository = projectMemberRepository;
+        this.accessService = accessService;
     }
 
     public DashboardMetricsDto getMetrics(User user) {
         DashboardMetricsDto dto = new DashboardMetricsDto();
         dto.setRole(user.getRole().name());
 
-        dto.setTotalUsers(userRepository.countByActiveTrue());
-        dto.setTotalProjects(projectRepository.count());
-        dto.setTotalIssues(issueRepository.count());
+        Set<Long> visibleProjects = accessService.accessibleProjectIds(user);
+        List<Issue> issues;
+        if (visibleProjects == null) {
+            issues = issueRepository.findAll();
+            dto.setTotalProjects(projectRepository.count());
+            dto.setTotalUsers(userRepository.countByActiveTrue());
+        } else {
+            issues = visibleProjects.isEmpty() ? List.of() : issueRepository.findByProjectIdIn(visibleProjects);
+            dto.setTotalProjects(visibleProjects.size());
+            // People the user works with: distinct members of their projects
+            dto.setTotalUsers(visibleProjects.isEmpty() ? 0 : projectMemberRepository.findByProjectIdIn(visibleProjects).stream()
+                    .map(ProjectMember::getUserId).distinct().count());
+        }
 
-        dto.setOpenIssues(issueRepository.countByStatus(IssueStatus.OPEN) + issueRepository.countByStatus(IssueStatus.ASSIGNED));
-        dto.setInProgressIssues(issueRepository.countByStatus(IssueStatus.IN_PROGRESS));
-        dto.setInReviewIssues(issueRepository.countByStatus(IssueStatus.IN_REVIEW));
-        dto.setResolvedIssues(issueRepository.countByStatus(IssueStatus.RESOLVED));
-        dto.setClosedIssues(issueRepository.countByStatus(IssueStatus.CLOSED));
-        dto.setCriticalIssues(issueRepository.countByPriority(IssuePriority.CRITICAL));
+        LocalDate today = LocalDate.now();
+        dto.setTotalIssues(issues.size());
+        dto.setOpenIssues(count(issues, i -> i.getStatus().isOpen()));
+        dto.setInProgressIssues(count(issues, i -> i.getStatus() == IssueStatus.IN_PROGRESS));
+        dto.setInReviewIssues(count(issues, i -> i.getStatus() == IssueStatus.IN_REVIEW));
+        dto.setResolvedIssues(count(issues, i -> i.getStatus() == IssueStatus.RESOLVED));
+        dto.setClosedIssues(count(issues, i -> i.getStatus() == IssueStatus.CLOSED));
+        dto.setCriticalIssues(count(issues, i -> i.getPriority() == IssuePriority.CRITICAL && !i.getStatus().isDone()));
+        dto.setOverdueIssues(count(issues, i -> i.getDueDate() != null && i.getDueDate().isBefore(today) && !i.getStatus().isDone()));
 
-        List<Issue> overdueList = issueRepository.findByDueDateBeforeAndStatusNotIn(
-                LocalDate.now(), List.of(IssueStatus.RESOLVED, IssueStatus.CLOSED));
-        dto.setOverdueIssues(overdueList.size());
+        // Personal metrics: only unresolved work counts as "on my plate"
+        List<Issue> myActive = issueRepository.findByAssigneeId(user.getId()).stream()
+                .filter(i -> !i.getStatus().isDone())
+                .toList();
+        dto.setMyAssignedIssues(myActive.size());
+        dto.setMyBugs(count(myActive, i -> i.getType() == IssueType.BUG));
+        dto.setMyTasks(count(myActive, i -> i.getType() == IssueType.TASK));
 
-        // Personal metrics for logged-in user
-        List<Issue> myAssigned = issueRepository.findByAssigneeId(user.getId());
-        dto.setMyAssignedIssues(myAssigned.stream().filter(i -> i.getStatus() != IssueStatus.CLOSED).count());
-        dto.setMyBugs(myAssigned.stream().filter(i -> i.getType() == IssueType.BUG && i.getStatus() != IssueStatus.CLOSED).count());
-        dto.setMyTasks(myAssigned.stream().filter(i -> i.getType() == IssueType.TASK && i.getStatus() != IssueStatus.CLOSED).count());
-
-        dto.setTotalTeams(teamRepository.count());
-
-        Map<String, Long> statusDist = new HashMap<>();
+        Map<String, Long> statusDist = new LinkedHashMap<>();
         for (IssueStatus s : IssueStatus.values()) {
-            statusDist.put(s.name(), issueRepository.countByStatus(s));
+            statusDist.put(s.name(), count(issues, i -> i.getStatus() == s));
         }
         dto.setStatusDistribution(statusDist);
 
-        Map<String, Long> priorityDist = new HashMap<>();
+        Map<String, Long> priorityDist = new LinkedHashMap<>();
         for (IssuePriority p : IssuePriority.values()) {
-            priorityDist.put(p.name(), issueRepository.countByPriority(p));
+            priorityDist.put(p.name(), count(issues, i -> i.getPriority() == p));
         }
         dto.setPriorityDistribution(priorityDist);
 
-        // Teams & Works assignment overview
-        List<com.devtrack.model.Team> allTeams = teamRepository.findAll();
-        List<Map<String, Object>> teamSummaries = new java.util.ArrayList<>();
-
-        for (com.devtrack.model.Team t : allTeams) {
-            boolean isManager = user.getId().equals(t.getManagerId());
-            boolean isLead = user.getId().equals(t.getTeamLeadId());
-            boolean isMember = teamMemberRepository.findByTeamIdAndUserId(t.getId(), user.getId()).isPresent();
-
-            // Include if user is assigned to the team OR if user is Super Admin / Admin / Manager
-            boolean isManagementRole = user.getRole() == com.devtrack.model.RoleType.SUPER_ADMIN
-                    || user.getRole() == com.devtrack.model.RoleType.ADMIN
-                    || user.getRole() == com.devtrack.model.RoleType.MANAGER;
-
-            if (isManager || isLead || isMember || isManagementRole) {
-                Map<String, Object> summary = new HashMap<>();
-                summary.put("id", t.getId());
-                summary.put("name", t.getName());
-                summary.put("description", t.getDescription());
-                summary.put("active", t.isActive());
-
-                if (t.getDepartmentId() != null) {
-                    departmentRepository.findById(t.getDepartmentId())
-                            .ifPresent(d -> summary.put("departmentName", d.getName()));
-                }
-
-                if (t.getManagerId() != null) {
-                    summary.put("managerId", t.getManagerId());
-                    userRepository.findById(t.getManagerId())
-                            .ifPresent(u -> summary.put("managerName", u.getFullName()));
-                }
-
-                if (t.getTeamLeadId() != null) {
-                    summary.put("teamLeadId", t.getTeamLeadId());
-                    userRepository.findById(t.getTeamLeadId())
-                            .ifPresent(u -> summary.put("teamLeadName", u.getFullName()));
-                }
-
-                long memberCount = teamMemberRepository.findByTeamId(t.getId()).size();
-                summary.put("memberCount", memberCount);
-
-                String roleInTeam = "Observer";
-                if (isManager) roleInTeam = "Team Manager";
-                else if (isLead) roleInTeam = "Team Lead";
-                else if (isMember) roleInTeam = "Member";
-                else if (user.getRole() == com.devtrack.model.RoleType.MANAGER) roleInTeam = "Manager Oversight";
-                else if (user.getRole() == com.devtrack.model.RoleType.SUPER_ADMIN || user.getRole() == com.devtrack.model.RoleType.ADMIN) roleInTeam = "Admin Oversight";
-                summary.put("userRoleInTeam", roleInTeam);
-
-                teamSummaries.add(summary);
-            }
-        }
+        List<Map<String, Object>> teamSummaries = buildTeamSummaries(user);
         dto.setMyTeams(teamSummaries);
+        dto.setTotalTeams(accessService.isAdmin(user) ? teamRepository.count() : teamSummaries.size());
 
         return dto;
+    }
+
+    private static long count(List<Issue> issues, java.util.function.Predicate<Issue> filter) {
+        return issues.stream().filter(filter).count();
+    }
+
+    private List<Map<String, Object>> buildTeamSummaries(User user) {
+        boolean admin = accessService.isAdmin(user);
+        Set<Long> memberTeamIds = teamMemberRepository.findByUserId(user.getId()).stream()
+                .map(TeamMember::getTeamId).collect(Collectors.toSet());
+
+        List<Map<String, Object>> summaries = new ArrayList<>();
+        for (Team t : teamRepository.findAll()) {
+            boolean isManager = user.getId().equals(t.getManagerId());
+            boolean isLead = user.getId().equals(t.getTeamLeadId());
+            boolean isMember = memberTeamIds.contains(t.getId());
+            if (!(isManager || isLead || isMember || admin)) {
+                continue;
+            }
+
+            Map<String, Object> summary = new HashMap<>();
+            summary.put("id", t.getId());
+            summary.put("name", t.getName());
+            summary.put("description", t.getDescription());
+            summary.put("active", t.isActive());
+
+            if (t.getDepartmentId() != null) {
+                departmentRepository.findById(t.getDepartmentId())
+                        .ifPresent(d -> summary.put("departmentName", d.getName()));
+            }
+            if (t.getManagerId() != null) {
+                summary.put("managerId", t.getManagerId());
+                userRepository.findById(t.getManagerId())
+                        .ifPresent(u -> summary.put("managerName", u.getFullName()));
+            }
+            if (t.getTeamLeadId() != null) {
+                summary.put("teamLeadId", t.getTeamLeadId());
+                userRepository.findById(t.getTeamLeadId())
+                        .ifPresent(u -> summary.put("teamLeadName", u.getFullName()));
+            }
+            summary.put("memberCount", (long) teamMemberRepository.findByTeamId(t.getId()).size());
+
+            String roleInTeam;
+            if (isManager) roleInTeam = "Team Manager";
+            else if (isLead) roleInTeam = "Team Lead";
+            else if (isMember) roleInTeam = "Member";
+            else roleInTeam = "Admin Oversight";
+            summary.put("userRoleInTeam", roleInTeam);
+
+            summaries.add(summary);
+        }
+        return summaries;
     }
 }

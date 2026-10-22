@@ -1,139 +1,218 @@
 # DEVTRACK 🚀
+
 ### Hierarchy-Based Issue Tracking & Project Management Desktop Application
 
-DevTrack is a role-based, hierarchy-driven issue tracking and project management desktop application designed for modern software teams and enterprises.
+DevTrack is a role-based issue tracker and project manager: a Spring Boot REST API plus a Flutter desktop (and web) client.
 
 ---
 
-## 📁 Project Architecture & Clean Folder Separation
-
-The application is strictly separated into two distinct, standalone directories:
+## 📁 Project Structure
 
 ```
-issuetracker/
-├── devtrack_backend/        # Java 17 + Spring Boot REST API
+Issue-Tracker/
+├── devtrack_backend/            # Java 17 + Spring Boot 3 REST API
 │   ├── src/main/java/com/devtrack/
-│   │   ├── config/          # Security, JWT & CORS configurations
-│   │   ├── controller/      # REST API endpoints (Auth, Projects, Issues, Teams, Users, Audit)
-│   │   ├── dto/             # Data Transfer Objects (Requests & Responses)
-│   │   ├── init/            # DataLoader with realistic seed data
-│   │   ├── model/           # JPA Entities (Users, Roles, Projects, Issues, Comments, History, Audit)
-│   │   ├── repository/      # Spring Data JPA Repositories
-│   │   ├── security/        # JWT Authentication Filter & Token Utils
-│   │   └── service/         # Business logic & permission enforcement
+│   │   ├── controller/          # REST endpoints (auth, projects, issues, users, teams, notifications, audit)
+│   │   ├── dto/                 # Request / response objects (validated, never bound directly to entities)
+│   │   ├── exception/           # ApiException types + GlobalExceptionHandler (consistent JSON error responses)
+│   │   ├── init/                # DataLoader: Super Admin bootstrap + demo data loader
+│   │   ├── model/               # JPA entities and enums (IssueStatus workflow, RoleType)
+│   │   ├── repository/          # Spring Data JPA repositories
+│   │   ├── security/            # JWT filter, SecurityConfig, AccessService (permission rules), RolePermissions
+│   │   └── service/             # Business logic
 │   ├── src/main/resources/
-│   │   ├── application.yml  # Dual H2 (zero-config dev) & PostgreSQL (production) profiles
-│   │   └── schema.sql       # Pure PostgreSQL 18 DDL schema script (for DBeaver)
-│   ├── mvnw.cmd             # Maven Wrapper (no separate Maven install required)
-│   └── pom.xml              # Minimal, clean dependencies (Spring Web, Data JPA, Security, H2, Postgres)
+│   │   ├── application.yml      # H2 (default) and PostgreSQL ("postgres") profiles
+│   │   └── schema.sql           # Reference PostgreSQL DDL & seed data for DBeaver/psql
+│   ├── src/test/java/...        # 24 integration tests for every role and permission rule
+│   └── mvnw / mvnw.cmd          # Maven wrapper
 │
-├── devtrack_desktop/        # Flutter Windows Desktop Application
-│   ├── lib/
-│   │   ├── main.dart        # Desktop app entry point
-│   │   ├── models/          # Dart data models (User, Project, Issue, Comment, AuditLog, Metrics)
-│   │   ├── services/        # ApiService (REST API + offline fallback) & AuthState
-│   │   └── screens/
-│   │       ├── main_layout.dart      # NavigationRail sidebar + Top Bar with Role Switcher
-│   │       ├── dashboard_screen.dart # Role-specific dashboard (Super Admin, Admin, Manager, Employee)
-│   │       ├── projects_screen.dart  # Project cards, progress indicators, creation dialog
-│   │       ├── issues_screen.dart    # Issue list, filters (Project, Status, Priority), details dialog
-│   │       ├── teams_screen.dart     # Departments and Teams hierarchy
-│   │       ├── users_screen.dart     # User management & active toggle
-│   │       └── audit_logs_screen.dart# Security and audit log trail
-│   └── pubspec.yaml         # Lightweight dependencies: only standard `http` package
+├── devtrack_desktop/            # Flutter app (Linux, Windows, macOS, web)
+│   ├── lib/models/              # Dart models (IssueModel, UserModel, ProjectModel, etc.)
+│   ├── lib/services/            # ApiService (HTTP + error handling) and AuthState (session)
+│   ├── lib/screens/             # Login, dashboard, projects, issues, teams, users, audit logs, notifications
+│   └── lib/utils/               # Session storage (cross-platform desktop & web storage)
 │
-└── README.md                # Project documentation & run guide
+├── setup_teammate.sql           # 1-Click PostgreSQL DDL + Seed data for teammate onboarding
+├── run_backend.bat              # 1-Click Windows batch launcher for backend
+├── run_desktop.bat              # 1-Click Windows batch launcher for desktop app
+├── run_web.bat                  # 1-Click Windows batch launcher for web frontend (port 3000)
+├── .env.example                 # Configuration template (copy to .env, which is git-ignored)
+└── README.md
 ```
 
 ---
 
-## 🔐 Real Authentication & Role-Based Flow
+## 👥 Teammate Quick Setup Guide
 
-DevTrack enforces real authentication and role-based access control directly against the Spring Boot REST API (`POST /api/v1/auth/login`).
+Follow these steps to set up DevTrack on your local machine:
 
-1. **Dedicated Login Screen**:
-   - The application launches with a clean Sign-In interface.
-   - Users enter their email and password credentials.
-   - On authentication, the backend validates passwords with `BCrypt`, issues a signed JWT token, and returns user details with authorized role permissions.
+### Step 1: Database Setup (PostgreSQL)
 
-2. **Strict Role-Based Flow & Navigation**:
-   - **Super Admin**: Access to Dashboard, Projects, Issues, Teams, Users management, and System Audit Logs.
-   - **Admin**: Access to Dashboard, Company Projects, Issues, Departments & Teams, and User accounts.
-   - **Manager**: Access to Dashboard, Assigned Projects, Team Issues, and Task assignments.
-   - **Employee**: Focused view of My Assigned Work, My Open Bugs, Task status transitions, and Work Comments.
-   - **Sign Out**: The top navigation bar includes an explicit "Sign Out" button which terminates the session and returns to the login screen.
+You can run PostgreSQL either locally or using Docker:
 
----
-
-## ⚡ Quick Start Guide
-
-### 1. Environment Configuration (.env)
-
-DevTrack reads `.env` configuration files automatically. A template `.env.example` is provided:
+#### Option A: Docker (Recommended)
 
 ```bash
-# In the project root or devtrack_backend:
-copy .env.example .env
+docker run -d --name devtrack-postgres \
+  -e POSTGRES_PASSWORD=admin@123 \
+  -e POSTGRES_DB=issuetracker \
+  -p 5432:5432 \
+  postgres:15-alpine
 ```
 
-Key `.env` parameters:
-- `SPRING_PROFILES_ACTIVE`: `postgres` (for PostgreSQL 18) or `default` (for zero-config local H2)
-- `DB_HOST`, `DB_PORT`, `DB_NAME`: Host, port, and database name (defaults: `localhost:5432/devtrack`)
-- `DB_USERNAME`, `DB_PASSWORD`: Your local database credentials
-- `SERVER_PORT`: `8080` (API port)
-- `JWT_SECRET`: 256-bit token signing secret
+#### Option B: Local PostgreSQL / DBeaver
 
-### 2. Running the Spring Boot Backend
+1. Open DBeaver or psql and create the database:
+   ```sql
+   CREATE DATABASE issuetracker;
+   ```
+2. Execute the onboarding script [`setup_teammate.sql`](file:///home/vkannantech/zo/Issue-Tracker/setup_teammate.sql) in DBeaver or via command line:
+   ```bash
+   psql -h localhost -U postgres -d issuetracker -f setup_teammate.sql
+   ```
 
-The backend includes a standalone Maven wrapper (`mvnw.cmd`) and runs with zero external tools needed beyond Java 17.
+---
+
+### Step 2: Environment Configuration
+
+Copy the `.env.example` file to `.env`:
+
+```bash
+cp .env.example .env        # Windows: copy .env.example .env
+```
+
+Ensure the database settings match your local PostgreSQL configuration:
+
+```env
+SPRING_PROFILES_ACTIVE=postgres
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=issuetracker
+DB_USERNAME=postgres
+DB_PASSWORD=admin@123
+JWT_SECRET=404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+API_BASE_URL=http://localhost:8080/api/v1
+```
+
+---
+
+### Step 3: Run the Backend (Spring Boot 3 + Java 17+)
 
 ```bash
 cd devtrack_backend
-.\mvnw.cmd spring-boot:run
+./mvnw spring-boot:run          # Windows: mvnw.cmd spring-boot:run
 ```
 
-- **PostgreSQL Database**: With `SPRING_PROFILES_ACTIVE=postgres` in `.env`, Spring Boot connects to PostgreSQL and automatically verifies/updates all tables.
-- **DBeaver Inspection**: The full DDL schema is provided in `devtrack_backend/src/main/resources/schema.sql`.
+Or double-click `run_backend.bat` on Windows.
 
-### 3. Running with 1-Click Launch Scripts (Windows)
+Run tests to verify access control & permission rules:
 
-Convenient one-click `.bat` scripts are provided in the project root:
-
-- **`run_backend.bat`**: Launches the Spring Boot backend service on port 8080 using Maven Wrapper.
-- **`run_web.bat`**: Launches the Flutter Web application locked to fixed port `3000` (`flutter run -d chrome --web-port=3000`). Using a fixed port preserves browser `localStorage` credentials and session cache permanently across restarts.
-- **`run_desktop.bat`**: Launches the Flutter Windows native desktop application.
-
-### 4. Running via VS Code / IDE
-
-A ready-to-use `.vscode/launch.json` is configured with:
-- **DevTrack Web (Fixed Port 3000)**: Launches Chrome on `http://localhost:3000`.
-- **DevTrack Desktop (Windows)**: Launches Windows desktop binary.
-- **DevTrack Backend (Spring Boot)**: Debugs Java backend in IDE.
-
-### 5. Demo Accounts & Credentials
-
-Reference credentials for each role hierarchy level:
-- **Super Admin**: `superadmin@devtrack.com` / `admin123`
-- **Admin**: `admin@devtrack.com` / `admin123`
-- **Manager (Karthisan)**: `vskarthisan@gmail.com` / `password123`
-- **Manager (Arun)**: `arun.manager@devtrack.com` / `password123`
-- **Team Lead (Suresh)**: `suresh.lead@devtrack.com` / `password123`
-- **Developer (Karthi)**: `karthi.dev@devtrack.com` / `password123`
+```bash
+./mvnw test
+```
 
 ---
 
-## 💡 Simple & Explainable Design Decisions
+### Step 4: Run the Flutter Client (Desktop / Web)
 
-1. **Fixed Web Port (3000) for Stable Sessions**:
-   - Web browsers isolate `localStorage` by origin (host + port). By locking Flutter Web to port 3000, user sessions never reset or disappear between app launches.
-2. **Robust Desktop Cache**:
-   - Desktop sessions are persistently stored in `%LOCALAPPDATA%/DevTrack/session_cache.json` and resilient against backend restarts.
-3. **No Complicated Heavy Libraries**:
-   - Backend uses pure, standard Spring Boot starters (Spring Web, Spring Security, Spring Data JPA).
-   - Frontend uses standard Flutter widgets and pure `http` without complex reactive frameworks.
-4. **Clean Normal UI**:
-   - Clean, professional desktop layout with a standard left navigation rail, readable typography, clear status chips, and intuitive dialogs.
-5. **100% Verified**:
-   - Backend compiled with `release 17` with zero errors.
-   - Flutter desktop app analyzed with `flutter analyze` with 0 issues.
+```bash
+cd devtrack_desktop
+flutter run -d linux            # Linux desktop
+flutter run -d windows          # Windows desktop (or run run_desktop.bat)
+flutter run -d chrome --web-port=3000  # Web client (or run run_web.bat)
+```
 
+Run frontend tests:
+
+```bash
+flutter test
+```
+
+---
+
+## 🔑 Teammate Test Accounts & Credentials
+
+**Password for ALL accounts:** `qwerty123`
+
+| Role            | Email                       | Password    | Access Level                                                 |
+| --------------- | --------------------------- | ----------- | ------------------------------------------------------------ |
+| **Super Admin** | `superadmin@devtrack.com`   | `qwerty123` | System management, manage admins, audit logs                 |
+| **Admin**       | `admin@devtrack.com`        | `qwerty123` | Department management, all teams, manage users up to Manager |
+| **Manager**     | `arun.manager@devtrack.com` | `qwerty123` | Project creator/owner, manage project members & teams        |
+| **Team Lead**   | `suresh.lead@devtrack.com`  | `qwerty123` | Assign and review issues in assigned projects                |
+| **QA / Tester** | `vijay.qa@devtrack.com`     | `qwerty123` | Test and report issues, verify fixes                         |
+| **Developer 1** | `karthi.dev@devtrack.com`   | `qwerty123` | Work on assigned issues, log time, comment                   |
+| **Developer 2** | `priya.dev@devtrack.com`    | `qwerty123` | Work on assigned issues, log time, comment                   |
+
+---
+
+## 🛠️ Helpful SQL Queries for Teammates
+
+Execute these in DBeaver or psql connected to `issuetracker`:
+
+### 1. Reset ALL Users' Password to `qwerty123`
+
+```sql
+UPDATE users SET password = '$2a$10$QWp5.GktNP3yVOzLHKQPvujiCPw.4zUiprUfZe0xjQc2ZQ085F27m';
+```
+
+### 2. View All Users and Their Roles
+
+```sql
+SELECT id, full_name, email, role, department, active FROM users ORDER BY id;
+```
+
+### 3. Unlock / Activate All Accounts
+
+```sql
+UPDATE users SET active = true;
+```
+
+### 4. Promote a User to SUPER_ADMIN
+
+```sql
+UPDATE users SET role = 'SUPER_ADMIN' WHERE email = 'your.email@devtrack.com';
+```
+
+---
+
+## 🔐 Roles and Permissions
+
+All rules are enforced by the API in `security/AccessService.java`. The app only hides what you cannot do; it never relies on UI hiding for security.
+
+| Role            | What they can do                                                                                                                                    |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Super Admin** | Everything, including managing Admins and other Super Admins.                                                                                       |
+| **Admin**       | See all projects/issues; manage departments, all teams, and users up to **Manager**; enable/disable accounts; audit logs.                           |
+| **Manager**     | Create projects (as owner); manage members of projects they own/PM; create and manage **their own** teams; promote/demote Team Leads and Employees. |
+| **Team Lead**   | See the staff directory and teams; assign and review issues in projects they belong to.                                                             |
+| **Employee**    | See only projects they belong to; report issues; work on and log time against issues assigned to them; comment.                                     |
+
+### Issue workflow
+
+```
+OPEN ──► ASSIGNED ──► IN_PROGRESS ──► IN_REVIEW ──► RESOLVED ──► CLOSED
+            │             │   ▲            │            │           │
+            └──► BLOCKED ◄┘   └────────────┘            └──► REOPENED ◄┘
+```
+
+- The **assignee** (or a team lead / project manager) moves work along: start, block, submit for review.
+- **Review decisions** (resolve, close, reopen, send back from review) are made by team leads, project managers, admins, or the **reporter**. Assignees cannot approve their own work.
+- Unassigning an issue moves it back to `OPEN`. Reopening clears its resolved date.
+- The API returns `allowedTransitions` for every issue, so the app only offers valid moves.
+- Issue keys (e.g. `WEB-104`) come from a per-project counter and are unique even under concurrent creation.
+
+---
+
+## 🧭 API Notes
+
+- Authentication is **bearer token only**: `Authorization: Bearer <jwt>` from `POST /api/v1/auth/login`. No auth cookies are issued.
+- `GET /api/v1/auth/me` returns the current user and their permission list.
+- Errors are JSON: `{"status": 403, "error": "Forbidden", "message": "...", "path": "..."}`. 401 = not signed in / token invalid, 403 = not allowed, 404 = not found, 409 = conflict.
+- Public endpoints: login, register (always creates an **Employee**, password ≥ 8 characters) and the department list.
+
+---
+
+## 🔒 Security Notes
+
+- Local `.env` files are ignored by git to protect credentials. Use `.env.example` as the configuration template.

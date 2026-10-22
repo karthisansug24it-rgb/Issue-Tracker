@@ -1,8 +1,6 @@
 package com.devtrack.controller;
 
-import com.devtrack.dto.CreateIssueRequest;
-import com.devtrack.dto.IssueDto;
-import com.devtrack.dto.UpdateIssueStatusRequest;
+import com.devtrack.dto.*;
 import com.devtrack.model.*;
 import com.devtrack.service.IssueService;
 import jakarta.validation.Valid;
@@ -11,7 +9,6 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/issues")
@@ -36,8 +33,8 @@ public class IssueController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<IssueDto> getIssueById(@PathVariable Long id) {
-        return ResponseEntity.ok(issueService.getIssueById(id));
+    public ResponseEntity<IssueDto> getIssueById(@PathVariable Long id, @AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(issueService.getIssueById(id, user));
     }
 
     @PostMapping
@@ -55,40 +52,37 @@ public class IssueController {
 
     @PatchMapping("/{id}/assignee")
     public ResponseEntity<IssueDto> assignIssue(@PathVariable Long id,
-                                               @RequestBody Map<String, Long> body,
+                                               @RequestBody AssignIssueRequest request,
                                                @AuthenticationPrincipal User user) {
-        Long assigneeId = body.get("assigneeId");
-        return ResponseEntity.ok(issueService.assignIssue(id, assigneeId, user));
+        return ResponseEntity.ok(issueService.assignIssue(id, request.getAssigneeId(), user));
     }
 
     @GetMapping("/{id}/history")
-    public ResponseEntity<List<IssueHistory>> getHistory(@PathVariable Long id) {
-        return ResponseEntity.ok(issueService.getIssueHistory(id));
+    public ResponseEntity<List<IssueHistory>> getHistory(@PathVariable Long id, @AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(issueService.getIssueHistory(id, user));
     }
 
     @GetMapping("/{id}/comments")
-    public ResponseEntity<List<IssueComment>> getComments(@PathVariable Long id) {
-        return ResponseEntity.ok(issueService.getIssueComments(id));
+    public ResponseEntity<List<IssueComment>> getComments(@PathVariable Long id, @AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(issueService.getIssueComments(id, user));
     }
 
     @PostMapping("/{id}/comments")
     public ResponseEntity<IssueComment> addComment(@PathVariable Long id,
-                                                   @RequestBody Map<String, String> body,
+                                                   @Valid @RequestBody CommentRequest request,
                                                    @AuthenticationPrincipal User user) {
-        return ResponseEntity.ok(issueService.addComment(id, body.get("commentText"), user));
+        return ResponseEntity.ok(issueService.addComment(id, request.getCommentText(), user));
     }
 
     @GetMapping("/{id}/time-entries")
-    public ResponseEntity<List<TimeEntry>> getTimeEntries(@PathVariable Long id) {
-        return ResponseEntity.ok(issueService.getTimeEntries(id));
+    public ResponseEntity<List<TimeEntry>> getTimeEntries(@PathVariable Long id, @AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(issueService.getTimeEntries(id, user));
     }
 
     @PostMapping("/{id}/time-entries")
     public ResponseEntity<TimeEntry> logTime(@PathVariable Long id,
-                                             @RequestBody Map<String, Object> body,
+                                             @Valid @RequestBody LogTimeRequest request,
                                              @AuthenticationPrincipal User user) {
-        Integer minutes = Integer.valueOf(body.get("durationMinutes").toString());
-        String desc = body.containsKey("workDescription") ? body.get("workDescription").toString() : "";
-        return ResponseEntity.ok(issueService.logTime(id, minutes, desc, user));
+        return ResponseEntity.ok(issueService.logTime(id, request.getDurationMinutes(), request.getWorkDescription(), user));
     }
 }

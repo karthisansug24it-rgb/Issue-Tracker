@@ -6,108 +6,22 @@ import 'issues_screen.dart';
 import 'teams_screen.dart';
 import 'users_screen.dart';
 import 'audit_logs_screen.dart';
-
-import '../services/app_router.dart';
-import '../utils/url_helper.dart';
+import 'notification_bell.dart';
 
 class MainLayout extends StatefulWidget {
-  final int initialTabIndex;
-  final String? denialNotice;
-
-  const MainLayout({
-    super.key,
-    this.initialTabIndex = 0,
-    this.denialNotice,
-  });
+  const MainLayout({super.key});
 
   @override
   State<MainLayout> createState() => _MainLayoutState();
 }
 
 class _MainLayoutState extends State<MainLayout> {
-  late int _selectedIndex;
+  int _selectedIndex = 0;
 
   @override
   void initState() {
     super.initState();
-    _selectedIndex = widget.initialTabIndex;
     AuthState.instance.addListener(_onAuthChanged);
-    _syncCurrentUrl();
-
-    listenToUrlChanges(_onBrowserUrlChanged);
-
-    if (widget.denialNotice != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              backgroundColor: Colors.red.shade900,
-              behavior: SnackBarBehavior.floating,
-              content: Row(
-                children: [
-                  const Icon(Icons.gpp_bad, color: Colors.white, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      widget.denialNotice!,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ),
-              duration: const Duration(seconds: 6),
-            ),
-          );
-        }
-      });
-    }
-  }
-
-  void _onBrowserUrlChanged(String newLocation) {
-    final user = AuthState.instance.currentUser;
-    if (user != null && mounted) {
-      final result = AppRouter.verifyRoute(newLocation, user);
-      if (result.isAllowed) {
-        if (_selectedIndex != result.initialTabIndex) {
-          setState(() {
-            _selectedIndex = result.initialTabIndex;
-          });
-        }
-      } else {
-        // Strict guard: revert URL and alert user
-        _syncCurrentUrl();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: Colors.red.shade900,
-            behavior: SnackBarBehavior.floating,
-            content: Row(
-              children: [
-                const Icon(Icons.shield, color: Colors.white, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    result.denialMessage ?? 'Unauthorized route access.',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-            duration: const Duration(seconds: 5),
-          ),
-        );
-      }
-    }
-  }
-
-  void _syncCurrentUrl() {
-    final user = AuthState.instance.currentUser;
-    if (user != null) {
-      AppRouter.syncUrl(
-        role: user.role,
-        tabIndex: _selectedIndex,
-        user: user,
-      );
-    }
   }
 
   @override
@@ -120,12 +34,10 @@ class _MainLayoutState extends State<MainLayout> {
     setState(() {
       _selectedIndex = 0; // reset to dashboard on auth change
     });
-    _syncCurrentUrl();
   }
 
   void _onNavigateToTab(int index) {
     setState(() => _selectedIndex = index);
-    _syncCurrentUrl();
   }
 
   @override
@@ -219,36 +131,6 @@ class _MainLayoutState extends State<MainLayout> {
                   'DevTrack',
                   style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 18),
                 ),
-                if (!isMobile) ...[
-                  const SizedBox(width: 10),
-                  Tooltip(
-                    message: 'Active Role Route & Verified Security Context',
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEFF6FF),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: const Color(0xFFBFDBFE)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.lock_outline, size: 12, color: Color(0xFF1E40AF)),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${RoleRoute.getRoleDefaultPath(user.role)}${AppRouter.indexToTabName(activeIndex, user) == 'dashboard' ? '' : '?tab=${AppRouter.indexToTabName(activeIndex, user)}'}',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF1E40AF),
-                              fontFamily: 'monospace',
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
               ],
             ),
             actions: [
@@ -291,6 +173,8 @@ class _MainLayoutState extends State<MainLayout> {
                       ),
               ),
 
+              const NotificationBell(),
+
               // Logout Button (Responsive: Icon button if compact, Outlined button if wide)
               Padding(
                 padding: EdgeInsets.only(right: isCompactAppBar ? 8 : 16),
@@ -298,10 +182,7 @@ class _MainLayoutState extends State<MainLayout> {
                     ? IconButton(
                         icon: const Icon(Icons.logout, size: 20, color: Colors.red),
                         tooltip: 'Sign Out',
-                        onPressed: () {
-                          setBrowserUrl('/login');
-                          AuthState.instance.logout();
-                        },
+                        onPressed: () => AuthState.instance.logout(),
                       )
                     : OutlinedButton.icon(
                         icon: const Icon(Icons.logout, size: 16),
@@ -312,7 +193,6 @@ class _MainLayoutState extends State<MainLayout> {
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         ),
                         onPressed: () {
-                          setBrowserUrl('/login');
                           AuthState.instance.logout();
                         },
                       ),
@@ -327,7 +207,7 @@ class _MainLayoutState extends State<MainLayout> {
                       // Role-Restricted Left Sidebar NavigationRail
                       NavigationRail(
                         selectedIndex: activeIndex,
-                        onDestinationSelected: _onNavigateToTab,
+                        onDestinationSelected: (index) => setState(() => _selectedIndex = index),
                         labelType: NavigationRailLabelType.all,
                         backgroundColor: Colors.white,
                         minWidth: 84,
@@ -346,7 +226,7 @@ class _MainLayoutState extends State<MainLayout> {
           bottomNavigationBar: isMobile
               ? NavigationBar(
                   selectedIndex: activeIndex,
-                  onDestinationSelected: _onNavigateToTab,
+                  onDestinationSelected: (index) => setState(() => _selectedIndex = index),
                   height: 62,
                   elevation: 2,
                   backgroundColor: Colors.white,

@@ -32,3 +32,8 @@ devtrack_desktop/.flutter-plugins
 devtrack_desktop/.flutter-plugins-dependencies
 devtrack_desktop/.pub-cache/
 devtrack_desktop/.pub/
+
+# Local environment files (credentials / secrets). Only the .env.example templates are tracked.
+.env
+**/.env
+!.env.example

@@ -4,7 +4,6 @@ import com.devtrack.model.User;
 import com.devtrack.repository.UserRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -52,21 +51,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
+    // Bearer header only: cookies are ignored so browsers cannot send credentials cross-site
     private String parseJwt(HttpServletRequest request) {
         String headerAuth = request.getHeader("Authorization");
         if (StringUtils.hasText(headerAuth) && headerAuth.startsWith("Bearer ")) {
             return headerAuth.substring(7);
-        }
-        if (request.getCookies() != null) {
-            for (Cookie cookie : request.getCookies()) {
-                if ("token".equalsIgnoreCase(cookie.getName()) ||
-                    "jwt".equalsIgnoreCase(cookie.getName()) ||
-                    "jwt_token".equalsIgnoreCase(cookie.getName())) {
-                    if (StringUtils.hasText(cookie.getValue())) {
-                        return cookie.getValue();
-                    }
-                }
-            }
         }
         return null;
     }

@@ -55,4 +55,22 @@ public class AuthResponse {
 
     public List<String> getPermissions() { return permissions; }
     public void setPermissions(List<String> permissions) { this.permissions = permissions; }
+
+    private Long departmentId;
+    private boolean active = true;
+
+    public Long getDepartmentId() { return departmentId; }
+    public void setDepartmentId(Long departmentId) { this.departmentId = departmentId; }
+
+    public boolean isActive() { return active; }
+    public void setActive(boolean active) { this.active = active; }
+
+    /** Builds the response for a user; the token is null for /auth/me. */
+    public static AuthResponse of(String token, com.devtrack.model.User user, List<String> permissions) {
+        AuthResponse r = new AuthResponse(token, user.getId(), user.getFullName(), user.getEmail(), user.getRole(),
+                user.getDepartment(), user.getJobTitle(), user.getAvatarUrl(), permissions);
+        r.setDepartmentId(user.getDepartmentId());
+        r.setActive(user.isActive());
+        return r;
+    }
 }
