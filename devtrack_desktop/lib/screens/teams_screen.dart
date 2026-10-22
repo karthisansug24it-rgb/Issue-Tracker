@@ -166,8 +166,8 @@ class _TeamsScreenState extends State<TeamsScreen> {
                   ),
                 ],
               ),
-              content: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 520),
+              content: SizedBox(
+                width: 520,
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -494,8 +494,8 @@ class _TeamsScreenState extends State<TeamsScreen> {
                   ),
                 ],
               ),
-              content: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 480),
+              content: SizedBox(
+                width: 480,
                 child: SingleChildScrollView(
                   child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -630,8 +630,8 @@ class _TeamsScreenState extends State<TeamsScreen> {
                   ),
                 ],
               ),
-              content: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 480),
+              content: SizedBox(
+                width: 480,
                 child: SingleChildScrollView(
                   child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -767,13 +767,10 @@ class _TeamsScreenState extends State<TeamsScreen> {
                   ),
                 ],
               ),
-              content: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 540, maxHeight: 600),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 480,
-                  child: Column(
-                  mainAxisSize: MainAxisSize.min,
+              content: SizedBox(
+                width: 540,
+                height: 480,
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Add Member Box (only for people who manage this team)
@@ -859,10 +856,8 @@ class _TeamsScreenState extends State<TeamsScreen> {
                               child: Text('No members assigned to this group yet.', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
                             ),
                           )
-                        : ConstrainedBox(
-                            constraints: const BoxConstraints(maxHeight: 280),
+                        : Expanded(
                             child: ListView.separated(
-                              shrinkWrap: true,
                               itemCount: team.members.length,
                               separatorBuilder: (context, _) => const Divider(height: 1),
                               itemBuilder: (itemCtx, idx) {
@@ -925,7 +920,6 @@ class _TeamsScreenState extends State<TeamsScreen> {
                   ],
                 ),
               ),
-            ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(dialogCtx),
@@ -954,8 +948,8 @@ class _TeamsScreenState extends State<TeamsScreen> {
             return AlertDialog(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               title: Text(isEditing ? 'Edit Department' : 'Create Department', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              content: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 460),
+              content: SizedBox(
+                width: 460,
                 child: SingleChildScrollView(
                   child: Column(
                   mainAxisSize: MainAxisSize.min,

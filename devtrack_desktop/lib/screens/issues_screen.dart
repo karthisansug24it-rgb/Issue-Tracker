@@ -469,8 +469,8 @@ class _IssuesScreenState extends State<IssuesScreen> {
 
             return AlertDialog(
               title: const Text('Create New Issue / Bug'),
-              content: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 500),
+              content: SizedBox(
+                width: 500,
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -781,8 +781,8 @@ class _IssuesScreenState extends State<IssuesScreen> {
                   IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(dialogContext)),
                 ],
               ),
-              content: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 650),
+              content: SizedBox(
+                width: 650,
                 child: SingleChildScrollView(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,

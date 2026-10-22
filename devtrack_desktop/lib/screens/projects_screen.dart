@@ -300,14 +300,13 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                   if (busy) const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
                 ],
               ),
-              content: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 560, maxHeight: 520),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+              content: SizedBox(
+                width: 560,
+                height: 480,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                       if (project.canManage && directory.isNotEmpty) ...[
                         Container(
                           padding: const EdgeInsets.all(10),
@@ -371,9 +370,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                       ],
                       Text('${members.length} member(s)', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                       const SizedBox(height: 6),
-                      Flexible(
+                      Expanded(
                         child: ListView.separated(
-                          shrinkWrap: true,
                           itemCount: members.length,
                           separatorBuilder: (_, _) => const Divider(height: 1),
                           itemBuilder: (_, i) {
@@ -428,8 +426,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                           },
                         ),
                       ),
-                    ],
-                  ),
+                  ],
                 ),
               ),
               actions: [
@@ -459,8 +456,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           builder: (context, setDialogState) {
             return AlertDialog(
               title: const Text('Create New Project'),
-              content: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 450),
+              content: SizedBox(
+                width: 450,
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,

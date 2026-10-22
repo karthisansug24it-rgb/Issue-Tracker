@@ -156,8 +156,8 @@ class _UsersScreenState extends State<UsersScreen> {
                   ),
                 ],
               ),
-              content: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 520),
+              content: SizedBox(
+                width: 520,
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
