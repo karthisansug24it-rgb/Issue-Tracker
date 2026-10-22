@@ -6,16 +6,17 @@ import com.devtrack.dto.RegisterRequest;
 import com.devtrack.dto.UserDto;
 import com.devtrack.model.User;
 import com.devtrack.service.AuthService;
-import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
+/**
+ * Authentication is bearer-token only (Authorization: Bearer <jwt>). No auth cookie is
+ * issued, so cross-site requests cannot ride on a browser session (no CSRF exposure).
+ */
 @RestController
 @RequestMapping("/api/v1/auth")
 public class AuthController {
@@ -27,32 +28,13 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@Valid @RequestBody AuthRequest request, HttpServletResponse response) {
-        AuthResponse authResponse = authService.login(request);
-
-        // Set HttpOnly cookie for web browsers / sessions
-        ResponseCookie cookie = ResponseCookie.from("token", authResponse.getToken())
-                .httpOnly(true)
-                .secure(false)
-                .path("/")
-                .maxAge(86400)
-                .sameSite("Lax")
-                .build();
-        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
-
-        return ResponseEntity.ok(authResponse);
+    public ResponseEntity<AuthResponse> login(@Valid @RequestBody AuthRequest request) {
+        return ResponseEntity.ok(authService.login(request));
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<Map<String, String>> logout(HttpServletResponse response) {
-        ResponseCookie cookie = ResponseCookie.from("token", "")
-                .httpOnly(true)
-                .secure(false)
-                .path("/")
-                .maxAge(0)
-                .sameSite("Lax")
-                .build();
-        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+    public ResponseEntity<Map<String, String>> logout() {
+        // Tokens are stateless; the client discards its token. Kept for API compatibility.
         return ResponseEntity.ok(Map.of("message", "Logged out successfully"));
     }
 
@@ -61,11 +43,9 @@ public class AuthController {
         return ResponseEntity.ok(authService.register(request));
     }
 
+    /** Current user plus their permission list (so a restored session has permissions too). */
     @GetMapping("/me")
-    public ResponseEntity<UserDto> getCurrentUser(@AuthenticationPrincipal User user) {
-        if (user == null) {
-            return ResponseEntity.status(401).build();
-        }
-        return ResponseEntity.ok(UserDto.fromEntity(user));
+    public ResponseEntity<AuthResponse> getCurrentUser(@AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(authService.currentUser(user));
     }
 }

@@ -1,12 +1,16 @@
 package com.devtrack.dto;
 
-import com.devtrack.model.RoleType;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
+/**
+ * Public self-registration. There is intentionally no role field: every new
+ * account starts as EMPLOYEE and is promoted by an administrator.
+ */
 public class RegisterRequest {
     @NotBlank(message = "Full name is required")
+    @Size(max = 100, message = "Full name must be at most 100 characters")
     private String fullName;
 
     @NotBlank(message = "Email is required")
@@ -14,9 +18,8 @@ public class RegisterRequest {
     private String email;
 
     @NotBlank(message = "Password is required")
+    @Size(min = 8, max = 100, message = "Password must be at least 8 characters")
     private String password;
-
-    private RoleType role = RoleType.EMPLOYEE;
 
     private String department;
     private String jobTitle;
@@ -31,9 +34,6 @@ public class RegisterRequest {
 
     public String getPassword() { return password; }
     public void setPassword(String password) { this.password = password; }
-
-    public RoleType getRole() { return role; }
-    public void setRole(RoleType role) { this.role = role; }
 
     public String getDepartment() { return department; }
     public void setDepartment(String department) { this.department = department; }

@@ -1,2 +1,3 @@
 export 'storage_helper_stub.dart'
+    if (dart.library.io) 'storage_helper_io.dart'
     if (dart.library.html) 'storage_helper_web.dart';

@@ -24,7 +24,9 @@ public class User {
     @Column(nullable = false)
     private RoleType role;
 
+    // Display name of the department; kept in sync with departmentId when it is set
     private String department;
+    private Long departmentId;
     private String jobTitle;
     private String avatarUrl;
 
@@ -80,6 +82,9 @@ public class User {
 
     public String getJobTitle() { return jobTitle; }
     public void setJobTitle(String jobTitle) { this.jobTitle = jobTitle; }
+
+    public Long getDepartmentId() { return departmentId; }
+    public void setDepartmentId(Long departmentId) { this.departmentId = departmentId; }
 
     public String getAvatarUrl() { return avatarUrl; }
     public void setAvatarUrl(String avatarUrl) { this.avatarUrl = avatarUrl; }

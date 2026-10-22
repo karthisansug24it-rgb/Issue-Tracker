@@ -6,6 +6,7 @@ import 'issues_screen.dart';
 import 'teams_screen.dart';
 import 'users_screen.dart';
 import 'audit_logs_screen.dart';
+import 'notification_bell.dart';
 
 class MainLayout extends StatefulWidget {
   const MainLayout({super.key});
@@ -171,6 +172,8 @@ class _MainLayoutState extends State<MainLayout> {
                         ],
                       ),
               ),
+
+              const NotificationBell(),
 
               // Logout Button (Responsive: Icon button if compact, Outlined button if wide)
               Padding(

@@ -69,4 +69,14 @@ public class ProjectDto {
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+    // Per-user capabilities for this project
+    private boolean canManage;
+    private boolean canAssign;
+
+    public boolean isCanManage() { return canManage; }
+    public void setCanManage(boolean canManage) { this.canManage = canManage; }
+
+    public boolean isCanAssign() { return canAssign; }
+    public void setCanAssign(boolean canAssign) { this.canAssign = canAssign; }
 }

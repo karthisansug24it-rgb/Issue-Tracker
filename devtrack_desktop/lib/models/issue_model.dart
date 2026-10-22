@@ -8,7 +8,7 @@ class IssueModel {
   final String description;
   final String type; // BUG, TASK, FEATURE, INCIDENT, SUPPORT_REQUEST
   final String priority; // CRITICAL, HIGH, MEDIUM, LOW
-  String status; // OPEN, ASSIGNED, IN_PROGRESS, IN_REVIEW, RESOLVED, CLOSED
+  String status; // OPEN, ASSIGNED, IN_PROGRESS, IN_REVIEW, RESOLVED, CLOSED, REOPENED, BLOCKED
   final int reporterId;
   final String reporterName;
   int? assigneeId;
@@ -16,6 +16,11 @@ class IssueModel {
   final String? dueDate;
   final int estimatedMinutes;
   int actualMinutes;
+
+  // Capabilities computed by the server for the signed-in user
+  List<String> allowedTransitions;
+  bool canAssign;
+  bool canLogTime;
 
   IssueModel({
     required this.id,
@@ -35,6 +40,9 @@ class IssueModel {
     this.dueDate,
     this.estimatedMinutes = 0,
     this.actualMinutes = 0,
+    this.allowedTransitions = const [],
+    this.canAssign = false,
+    this.canLogTime = false,
   });
 
   factory IssueModel.fromJson(Map<String, dynamic> json) {
@@ -56,7 +64,23 @@ class IssueModel {
       dueDate: json['dueDate'],
       estimatedMinutes: json['estimatedMinutes'] ?? 0,
       actualMinutes: json['actualMinutes'] ?? 0,
+      allowedTransitions: json['allowedTransitions'] != null
+          ? List<String>.from(json['allowedTransitions'])
+          : const [],
+      canAssign: json['canAssign'] ?? false,
+      canLogTime: json['canLogTime'] ?? false,
     );
+  }
+
+  /// Copies the server's latest view of this issue (after an update) into this instance.
+  void applyFrom(IssueModel other) {
+    status = other.status;
+    assigneeId = other.assigneeId;
+    assigneeName = other.assigneeName;
+    actualMinutes = other.actualMinutes;
+    allowedTransitions = other.allowedTransitions;
+    canAssign = other.canAssign;
+    canLogTime = other.canLogTime;
   }
 
   Map<String, dynamic> toJson() {
@@ -78,6 +102,9 @@ class IssueModel {
       'dueDate': dueDate,
       'estimatedMinutes': estimatedMinutes,
       'actualMinutes': actualMinutes,
+      'allowedTransitions': allowedTransitions,
+      'canAssign': canAssign,
+      'canLogTime': canLogTime,
     };
   }
 }

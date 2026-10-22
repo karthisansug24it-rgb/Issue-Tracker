@@ -7,6 +7,8 @@ import com.devtrack.model.IssueType;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 public class IssueDto {
     private Long id;
@@ -112,4 +114,18 @@ public class IssueDto {
 
     public LocalDateTime getResolvedAt() { return resolvedAt; }
     public void setResolvedAt(LocalDateTime resolvedAt) { this.resolvedAt = resolvedAt; }
+
+    // Per-user capabilities, computed by the server so the client never guesses the rules
+    private List<IssueStatus> allowedTransitions = new ArrayList<>();
+    private boolean canAssign;
+    private boolean canLogTime;
+
+    public List<IssueStatus> getAllowedTransitions() { return allowedTransitions; }
+    public void setAllowedTransitions(List<IssueStatus> allowedTransitions) { this.allowedTransitions = allowedTransitions; }
+
+    public boolean isCanAssign() { return canAssign; }
+    public void setCanAssign(boolean canAssign) { this.canAssign = canAssign; }
+
+    public boolean isCanLogTime() { return canLogTime; }
+    public void setCanLogTime(boolean canLogTime) { this.canLogTime = canLogTime; }
 }

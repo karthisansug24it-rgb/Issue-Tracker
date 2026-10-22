@@ -1,16 +1,16 @@
 package com.devtrack.controller;
 
+import com.devtrack.dto.UpdateRoleRequest;
 import com.devtrack.dto.UserDto;
-import com.devtrack.model.RoleType;
 import com.devtrack.model.User;
 import com.devtrack.service.UserService;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/users")
@@ -22,28 +22,31 @@ public class UserController {
         this.userService = userService;
     }
 
+    // The staff directory (with emails) is for Team Lead and above.
+    // Employees pick assignees from GET /projects/{id}/members instead.
     @GetMapping
-    public ResponseEntity<List<UserDto>> getAllUsers() {
-        return ResponseEntity.ok(userService.getAllUsers());
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'TEAM_LEAD')")
+    public ResponseEntity<List<UserDto>> getAllUsers(@AuthenticationPrincipal User viewer) {
+        return ResponseEntity.ok(userService.getAllUsers(viewer));
     }
 
     @GetMapping("/active")
-    public ResponseEntity<List<UserDto>> getActiveUsers() {
-        return ResponseEntity.ok(userService.getActiveUsers());
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'TEAM_LEAD')")
+    public ResponseEntity<List<UserDto>> getActiveUsers(@AuthenticationPrincipal User viewer) {
+        return ResponseEntity.ok(userService.getActiveUsers(viewer));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<UserDto> getUserById(@PathVariable Long id) {
-        return ResponseEntity.ok(userService.getUserById(id));
+    public ResponseEntity<UserDto> getUserById(@PathVariable Long id, @AuthenticationPrincipal User viewer) {
+        return ResponseEntity.ok(userService.getUserById(id, viewer));
     }
 
     @PatchMapping("/{id}/role")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER')")
     public ResponseEntity<UserDto> updateRole(@PathVariable Long id,
-                                             @RequestBody Map<String, String> body,
+                                             @Valid @RequestBody UpdateRoleRequest request,
                                              @AuthenticationPrincipal User actor) {
-        RoleType role = RoleType.valueOf(body.get("role"));
-        return ResponseEntity.ok(userService.updateUserRole(id, role, actor));
+        return ResponseEntity.ok(userService.updateUserRole(id, request.getRole(), actor));
     }
 
     @PatchMapping("/{id}/status")

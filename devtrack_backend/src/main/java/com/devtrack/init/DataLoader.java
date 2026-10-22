@@ -2,15 +2,36 @@ package com.devtrack.init;
 
 import com.devtrack.model.*;
 import com.devtrack.repository.*;
+import com.devtrack.service.OrganizationService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
+/**
+ * Startup tasks, all idempotent:
+ *  1. Make sure at least one active Super Admin exists (bootstrap account).
+ *  2. On an empty database, optionally load demo data (devtrack.seed.demo-data).
+ *  3. Link users whose department is only free text to the matching Department row.
+ *
+ * It never rewrites existing teams, projects or issues.
+ */
 @Component
 public class DataLoader implements CommandLineRunner {
+
+    private static final Logger log = LoggerFactory.getLogger(DataLoader.class);
+
+    // Demo accounts (documented in README). Only created when demo data is enabled.
+    private static final String DEMO_PASSWORD = "password123";
+    private static final String DEMO_ADMIN_PASSWORD = "admin123";
 
     private final UserRepository userRepository;
     private final DepartmentRepository departmentRepository;
@@ -25,6 +46,16 @@ public class DataLoader implements CommandLineRunner {
     private final NotificationRepository notificationRepository;
     private final AuditLogRepository auditLogRepository;
     private final PasswordEncoder passwordEncoder;
+    private final OrganizationService organizationService;
+
+    @Value("${devtrack.seed.demo-data:true}")
+    private boolean seedDemoData;
+
+    @Value("${devtrack.bootstrap.admin-email:superadmin@devtrack.com}")
+    private String bootstrapAdminEmail;
+
+    @Value("${devtrack.bootstrap.admin-password:}")
+    private String bootstrapAdminPassword;
 
     public DataLoader(UserRepository userRepository,
                       DepartmentRepository departmentRepository,
@@ -38,7 +69,8 @@ public class DataLoader implements CommandLineRunner {
                       TimeEntryRepository timeEntryRepository,
                       NotificationRepository notificationRepository,
                       AuditLogRepository auditLogRepository,
-                      PasswordEncoder passwordEncoder) {
+                      PasswordEncoder passwordEncoder,
+                      OrganizationService organizationService) {
         this.userRepository = userRepository;
         this.departmentRepository = departmentRepository;
         this.teamRepository = teamRepository;
@@ -52,212 +84,223 @@ public class DataLoader implements CommandLineRunner {
         this.notificationRepository = notificationRepository;
         this.auditLogRepository = auditLogRepository;
         this.passwordEncoder = passwordEncoder;
+        this.organizationService = organizationService;
     }
 
     @Override
+    @Transactional
     public void run(String... args) {
-        // Always ensure the Super Admin account exists and is ready for use
-        User superAdmin = userRepository.findByEmail("superadmin@devtrack.com").orElse(null);
-        if (superAdmin == null) {
-            superAdmin = new User(null, "Super Admin", "superadmin@devtrack.com",
-                    passwordEncoder.encode("admin123"), RoleType.SUPER_ADMIN, "Executive", "System Super Admin");
-            superAdmin = userRepository.save(superAdmin);
-            System.out.println("Super Admin verified/created: superadmin@devtrack.com / admin123");
+        if (seedDemoData && departmentRepository.count() == 0 && projectRepository.count() == 0) {
+            seedDemoData();
+        }
+        ensureSuperAdmin();
+        linkUserDepartments();
+    }
+
+    // ------------------------------------------------------------ bootstrap
+
+    private void ensureSuperAdmin() {
+        if (userRepository.countByRoleAndActiveTrue(RoleType.SUPER_ADMIN) > 0) {
+            return;
         }
 
-        // Always ensure Team Lead account exists
-        User leadSuresh = userRepository.findByEmail("suresh.lead@devtrack.com").orElse(null);
-        if (leadSuresh == null) {
-            leadSuresh = new User(null, "Suresh Lead", "suresh.lead@devtrack.com",
-                    passwordEncoder.encode("password123"), RoleType.TEAM_LEAD, "Engineering", "Technical Team Lead");
-            leadSuresh = userRepository.save(leadSuresh);
-            System.out.println("Team Lead verified/created: suresh.lead@devtrack.com / password123");
+        String email = bootstrapAdminEmail.trim().toLowerCase();
+        User existing = userRepository.findByEmail(email).orElse(null);
+        if (existing != null) {
+            // Recovery path: no active Super Admin is left, so restore the bootstrap account
+            existing.setRole(RoleType.SUPER_ADMIN);
+            existing.setActive(true);
+            userRepository.save(existing);
+            log.warn("No active Super Admin found. Restored Super Admin access for {}", email);
+            return;
         }
 
-        // Backfill managerId and teamLeadId for any existing teams
-        User managerArun = userRepository.findByEmail("arun.manager@devtrack.com").orElse(null);
-        if (managerArun != null && leadSuresh != null) {
-            for (Team t : teamRepository.findAll()) {
-                boolean modified = false;
-                if (t.getManagerId() == null) {
-                    t.setManagerId(managerArun.getId());
-                    modified = true;
-                }
-                if (t.getTeamLeadId() == null) {
-                    t.setTeamLeadId(leadSuresh.getId());
-                    modified = true;
-                }
-                if (modified) {
-                    teamRepository.save(t);
-                    if (teamMemberRepository.findByTeamIdAndUserId(t.getId(), managerArun.getId()).isEmpty()) {
-                        teamMemberRepository.save(new TeamMember(t.getId(), managerArun.getId()));
-                    }
-                    if (teamMemberRepository.findByTeamIdAndUserId(t.getId(), leadSuresh.getId()).isEmpty()) {
-                        teamMemberRepository.save(new TeamMember(t.getId(), leadSuresh.getId()));
-                    }
-                }
+        String password = bootstrapAdminPassword;
+        boolean generated = false;
+        if (password == null || password.isBlank()) {
+            if (seedDemoData) {
+                password = DEMO_ADMIN_PASSWORD;
+            } else {
+                password = randomPassword();
+                generated = true;
             }
         }
 
-        if (departmentRepository.count() > 0 || projectRepository.count() > 0) {
-            return; // Remainder of seed data already initialized
+        User admin = new User(null, "Super Admin", email, passwordEncoder.encode(password),
+                RoleType.SUPER_ADMIN, "Executive", "System Super Admin");
+        userRepository.save(admin);
+        auditLogRepository.save(new AuditLog(null, "SYSTEM", "SUPER_ADMIN_BOOTSTRAPPED", "USER",
+                String.valueOf(admin.getId()), "Initial Super Admin account created: " + email));
+
+        if (generated) {
+            log.warn("Created initial Super Admin {} with generated password: {}  (change it after first sign-in)",
+                    email, password);
+        } else {
+            log.info("Created initial Super Admin {}", email);
         }
+    }
 
-        System.out.println("Initializing DevTrack with realistic sample data...");
-
-        // 1. Seed Users (All 4 hierarchy levels)
-        User admin = userRepository.findByEmail("admin@devtrack.com").orElse(null);
-        if (admin == null) {
-            admin = new User(null, "Divya Admin", "admin@devtrack.com",
-                    passwordEncoder.encode("admin123"), RoleType.ADMIN, "Operations", "Organization Admin");
-            admin = userRepository.save(admin);
+    private static String randomPassword() {
+        String alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+        SecureRandom random = new SecureRandom();
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < 16; i++) {
+            sb.append(alphabet.charAt(random.nextInt(alphabet.length())));
         }
+        return sb.toString();
+    }
 
-        if (managerArun == null) {
-            managerArun = new User(null, "Arun Kumar", "arun.manager@devtrack.com",
-                    passwordEncoder.encode("password123"), RoleType.MANAGER, "Engineering", "Engineering Manager");
-            managerArun = userRepository.save(managerArun);
+    /** Links free-text departments (e.g. from older data or registration) to real departments. */
+    private void linkUserDepartments() {
+        List<User> unlinked = userRepository.findByDepartmentIdIsNull();
+        for (User u : unlinked) {
+            organizationService.findDepartment(u.getDepartment()).ifPresent(d -> {
+                u.setDepartmentId(d.getId());
+                u.setDepartment(d.getName());
+                userRepository.save(u);
+            });
         }
+    }
 
-        User empKarthi = userRepository.findByEmail("karthi.dev@devtrack.com").orElse(null);
-        if (empKarthi == null) {
-            empKarthi = new User(null, "Karthi Raman", "karthi.dev@devtrack.com",
-                    passwordEncoder.encode("password123"), RoleType.EMPLOYEE, "Engineering", "Frontend Developer");
-            empKarthi = userRepository.save(empKarthi);
-        }
+    // ------------------------------------------------------------- demo data
 
-        User empPriya = userRepository.findByEmail("priya.dev@devtrack.com").orElse(null);
-        if (empPriya == null) {
-            empPriya = new User(null, "Priya Sharma", "priya.dev@devtrack.com",
-                    passwordEncoder.encode("password123"), RoleType.EMPLOYEE, "Engineering", "Backend API Developer");
-            empPriya = userRepository.save(empPriya);
-        }
+    private User demoUser(String name, String email, String password, RoleType role, Department dept, String title) {
+        return userRepository.findByEmail(email).orElseGet(() -> {
+            User u = new User(null, name, email, passwordEncoder.encode(password), role,
+                    dept != null ? dept.getName() : null, title);
+            u.setDepartmentId(dept != null ? dept.getId() : null);
+            return userRepository.save(u);
+        });
+    }
 
-        User testerVijay = userRepository.findByEmail("vijay.qa@devtrack.com").orElse(null);
-        if (testerVijay == null) {
-            testerVijay = new User(null, "Vijay Tester", "vijay.qa@devtrack.com",
-                    passwordEncoder.encode("password123"), RoleType.EMPLOYEE, "Quality Assurance", "QA Automation Tester");
-            testerVijay = userRepository.save(testerVijay);
-        }
+    private void seedDemoData() {
+        log.info("Initializing DevTrack with demo data (set SEED_DEMO_DATA=false to disable)...");
 
-        // 2. Seed Departments
+        // 1. Departments
         Department deptEng = departmentRepository.save(new Department("Engineering", "ENG", "Software engineering and development"));
         Department deptQA = departmentRepository.save(new Department("Quality Assurance", "QA", "Software quality and testing"));
         Department deptOps = departmentRepository.save(new Department("Operations & Support", "OPS", "Production operations and support"));
+        Department deptExec = departmentRepository.save(new Department("Executive", "EXEC", "Leadership and administration"));
 
-        // 3. Seed Teams (Explicit Department + Manager + Team Lead)
+        // 2. Users (every hierarchy level, each linked to a real department)
+        User superAdmin = demoUser("Super Admin", bootstrapAdminEmail.trim().toLowerCase(),
+                bootstrapAdminPassword != null && !bootstrapAdminPassword.isBlank() ? bootstrapAdminPassword : DEMO_ADMIN_PASSWORD,
+                RoleType.SUPER_ADMIN, deptExec, "System Super Admin");
+        User admin = demoUser("Divya Admin", "admin@devtrack.com", DEMO_ADMIN_PASSWORD, RoleType.ADMIN, deptOps, "Organization Admin");
+        User managerArun = demoUser("Arun Kumar", "arun.manager@devtrack.com", DEMO_PASSWORD, RoleType.MANAGER, deptEng, "Engineering Manager");
+        User leadSuresh = demoUser("Suresh Lead", "suresh.lead@devtrack.com", DEMO_PASSWORD, RoleType.TEAM_LEAD, deptEng, "Technical Team Lead");
+        User empKarthi = demoUser("Karthi Raman", "karthi.dev@devtrack.com", DEMO_PASSWORD, RoleType.EMPLOYEE, deptEng, "Frontend Developer");
+        User empPriya = demoUser("Priya Sharma", "priya.dev@devtrack.com", DEMO_PASSWORD, RoleType.EMPLOYEE, deptEng, "Backend API Developer");
+        User leadVijay = demoUser("Vijay Tester", "vijay.qa@devtrack.com", DEMO_PASSWORD, RoleType.TEAM_LEAD, deptQA, "QA Automation Lead");
+
+        // 3. Teams (manager is a MANAGER, lead is a TEAM_LEAD)
         Team teamWeb = teamRepository.save(new Team("Web Development Team", deptEng.getId(), managerArun.getId(), leadSuresh.getId(), "Fullstack web apps"));
         Team teamMob = teamRepository.save(new Team("Mobile & Cloud Team", deptEng.getId(), managerArun.getId(), leadSuresh.getId(), "Mobile app solutions"));
-        Team teamQA = teamRepository.save(new Team("Core QA Team", deptQA.getId(), managerArun.getId(), testerVijay.getId(), "Regression and test automation"));
+        Team teamQA = teamRepository.save(new Team("Core QA Team", deptQA.getId(), managerArun.getId(), leadVijay.getId(), "Regression and test automation"));
 
-        teamMemberRepository.save(new TeamMember(teamWeb.getId(), managerArun.getId()));
-        teamMemberRepository.save(new TeamMember(teamWeb.getId(), leadSuresh.getId()));
-        teamMemberRepository.save(new TeamMember(teamWeb.getId(), empKarthi.getId()));
-        teamMemberRepository.save(new TeamMember(teamWeb.getId(), empPriya.getId()));
-        teamMemberRepository.save(new TeamMember(teamMob.getId(), managerArun.getId()));
-        teamMemberRepository.save(new TeamMember(teamMob.getId(), leadSuresh.getId()));
-        teamMemberRepository.save(new TeamMember(teamMob.getId(), empKarthi.getId()));
-        teamMemberRepository.save(new TeamMember(teamQA.getId(), managerArun.getId()));
-        teamMemberRepository.save(new TeamMember(teamQA.getId(), testerVijay.getId()));
+        for (User u : List.of(managerArun, leadSuresh, empKarthi, empPriya)) {
+            teamMemberRepository.save(new TeamMember(teamWeb.getId(), u.getId()));
+        }
+        for (User u : List.of(managerArun, leadSuresh, empKarthi)) {
+            teamMemberRepository.save(new TeamMember(teamMob.getId(), u.getId()));
+        }
+        for (User u : List.of(managerArun, leadVijay)) {
+            teamMemberRepository.save(new TeamMember(teamQA.getId(), u.getId()));
+        }
 
-        // 4. Seed Projects
-        Project projWeb = projectRepository.save(new Project(
-                "WEB", "Website Development", "Company client web portal and internal tools",
-                managerArun.getId(), LocalDate.now().minusDays(15), LocalDate.now().plusDays(45)));
+        // 4. Projects
+        Project projWeb = newProject("WEB", "Website Development", "Company client web portal and internal tools",
+                managerArun, 15, 45, 104);
+        Project projMob = newProject("MOB", "Mobile Application", "Android and iOS customer mobile app",
+                managerArun, 30, 60, 102);
+        Project projPay = newProject("PAY", "Payment System Integration", "Razorpay, Stripe and UPI payment gateways",
+                managerArun, 10, 30, 102);
 
-        Project projMob = projectRepository.save(new Project(
-                "MOB", "Mobile Application", "Android and iOS customer mobile app",
-                managerArun.getId(), LocalDate.now().minusDays(30), LocalDate.now().plusDays(60)));
+        member(projWeb, managerArun, ProjectRole.PROJECT_MANAGER);
+        member(projWeb, leadSuresh, ProjectRole.TECH_LEAD);
+        member(projWeb, empKarthi, ProjectRole.DEVELOPER);
+        member(projWeb, empPriya, ProjectRole.DEVELOPER);
+        member(projWeb, leadVijay, ProjectRole.TESTER);
 
-        Project projPay = projectRepository.save(new Project(
-                "PAY", "Payment System Integration", "Razorpay, Stripe and UPI payment gateways",
-                managerArun.getId(), LocalDate.now().minusDays(10), LocalDate.now().plusDays(30)));
+        member(projMob, managerArun, ProjectRole.PROJECT_MANAGER);
+        member(projMob, leadSuresh, ProjectRole.TECH_LEAD);
+        member(projMob, empKarthi, ProjectRole.DEVELOPER);
+        member(projMob, leadVijay, ProjectRole.TESTER);
 
-        // Project memberships
-        projectMemberRepository.save(new ProjectMember(projWeb.getId(), managerArun.getId(), ProjectRole.PROJECT_MANAGER));
-        projectMemberRepository.save(new ProjectMember(projWeb.getId(), empKarthi.getId(), ProjectRole.DEVELOPER));
-        projectMemberRepository.save(new ProjectMember(projWeb.getId(), empPriya.getId(), ProjectRole.DEVELOPER));
-        projectMemberRepository.save(new ProjectMember(projWeb.getId(), testerVijay.getId(), ProjectRole.TESTER));
+        member(projPay, managerArun, ProjectRole.PROJECT_MANAGER);
+        member(projPay, empPriya, ProjectRole.DEVELOPER);
 
-        projectMemberRepository.save(new ProjectMember(projMob.getId(), managerArun.getId(), ProjectRole.PROJECT_MANAGER));
-        projectMemberRepository.save(new ProjectMember(projMob.getId(), empKarthi.getId(), ProjectRole.DEVELOPER));
-        projectMemberRepository.save(new ProjectMember(projMob.getId(), testerVijay.getId(), ProjectRole.TESTER));
-
-        projectMemberRepository.save(new ProjectMember(projPay.getId(), managerArun.getId(), ProjectRole.PROJECT_MANAGER));
-        projectMemberRepository.save(new ProjectMember(projPay.getId(), empPriya.getId(), ProjectRole.DEVELOPER));
-
-        // 5. Seed Issues (From User's Real Scenario)
-        // BUG-101: Login button not working (Critical, Karthi, Open)
-        Issue bug101 = new Issue("WEB-101", projWeb.getId(), "Login button not working",
+        // 5. Issues (statuses consistent with the workflow: assigned issues start as ASSIGNED)
+        Issue bug101 = issueRepository.save(new Issue("WEB-101", projWeb.getId(), "Login button not working",
                 "Clicking login button does not trigger validation or form submission on Chrome and Edge.",
-                IssueType.BUG, IssuePriority.CRITICAL, IssueStatus.OPEN, managerArun.getId(), empKarthi.getId(),
-                LocalDate.now().plusDays(3), 180);
-        bug101 = issueRepository.save(bug101);
-
+                IssueType.BUG, IssuePriority.CRITICAL, IssueStatus.ASSIGNED, managerArun.getId(), empKarthi.getId(),
+                LocalDate.now().plusDays(3), 180));
         historyRepository.save(new IssueHistory(bug101.getId(), managerArun.getId(), managerArun.getFullName(),
-                "CREATED", null, "OPEN"));
-        historyRepository.save(new IssueHistory(bug101.getId(), managerArun.getId(), managerArun.getFullName(),
-                "ASSIGNEE", "Unassigned", empKarthi.getFullName()));
-
+                "CREATED", null, "ASSIGNED"));
         commentRepository.save(new IssueComment(bug101.getId(), managerArun.getId(), managerArun.getFullName(),
                 "Critical priority issue. Please investigate the onClick event handler and form submission logic."));
 
-        // TASK-102: Build login API (In Progress, Priya)
         Issue task102 = new Issue("WEB-102", projWeb.getId(), "Build login API",
                 "Implement JWT authentication endpoint POST /api/v1/auth/login with BCrypt password hashing.",
                 IssueType.TASK, IssuePriority.HIGH, IssueStatus.IN_PROGRESS, managerArun.getId(), empPriya.getId(),
                 LocalDate.now().plusDays(5), 360);
         task102.setActualMinutes(120);
         task102 = issueRepository.save(task102);
-
         historyRepository.save(new IssueHistory(task102.getId(), managerArun.getId(), managerArun.getFullName(),
-                "CREATED", null, "OPEN"));
+                "CREATED", null, "ASSIGNED"));
         historyRepository.save(new IssueHistory(task102.getId(), empPriya.getId(), empPriya.getFullName(),
                 "STATUS", "ASSIGNED", "IN_PROGRESS"));
-
         timeEntryRepository.save(new TimeEntry(task102.getId(), empPriya.getId(), empPriya.getFullName(),
                 120, "Implemented JWT token creation and security filter chains"));
 
-        // TASK-103: Test registration form (Resolved, Vijay)
         Issue task103 = new Issue("WEB-103", projWeb.getId(), "Test registration form",
                 "Perform cross-browser validation and automated test execution for customer registration page.",
-                IssueType.TASK, IssuePriority.MEDIUM, IssueStatus.RESOLVED, managerArun.getId(), testerVijay.getId(),
+                IssueType.TASK, IssuePriority.MEDIUM, IssueStatus.RESOLVED, managerArun.getId(), leadVijay.getId(),
                 LocalDate.now().minusDays(1), 240);
         task103.setActualMinutes(240);
         task103.setResolvedAt(LocalDateTime.now().minusHours(4));
         task103 = issueRepository.save(task103);
-
-        historyRepository.save(new IssueHistory(task103.getId(), testerVijay.getId(), testerVijay.getFullName(),
-                "STATUS", "IN_PROGRESS", "RESOLVED"));
-        commentRepository.save(new IssueComment(task103.getId(), testerVijay.getId(), testerVijay.getFullName(),
+        historyRepository.save(new IssueHistory(task103.getId(), managerArun.getId(), managerArun.getFullName(),
+                "STATUS", "IN_REVIEW", "RESOLVED"));
+        commentRepository.save(new IssueComment(task103.getId(), leadVijay.getId(), leadVijay.getFullName(),
                 "Test suite executed. All 24 test cases passed on Chrome, Firefox, and Edge. Fix verified."));
 
-        // Additional issues for MOB and PAY
-        Issue bug201 = new Issue("MOB-201", projMob.getId(), "Push notification crash on Android 14",
+        Issue bug201 = new Issue("MOB-101", projMob.getId(), "Push notification crash on Android 14",
                 "App closes unexpectedly when receiving push notification payload while in background state.",
                 IssueType.BUG, IssuePriority.HIGH, IssueStatus.IN_REVIEW, managerArun.getId(), empKarthi.getId(),
                 LocalDate.now().plusDays(2), 300);
         bug201.setActualMinutes(280);
-        issueRepository.save(bug201);
+        bug201 = issueRepository.save(bug201);
 
-        Issue task301 = new Issue("PAY-301", projPay.getId(), "Stripe Webhook Handler",
+        issueRepository.save(new Issue("PAY-101", projPay.getId(), "Stripe Webhook Handler",
                 "Build idempotent webhook listener for Stripe payment success and failure events.",
-                IssueType.FEATURE, IssuePriority.HIGH, IssueStatus.OPEN, managerArun.getId(), empPriya.getId(),
-                LocalDate.now().plusDays(8), 480);
-        issueRepository.save(task301);
+                IssueType.FEATURE, IssuePriority.HIGH, IssueStatus.ASSIGNED, managerArun.getId(), empPriya.getId(),
+                LocalDate.now().plusDays(8), 480));
 
         // 6. Notifications
         notificationRepository.save(new Notification(empKarthi.getId(), "Urgent Bug Assignment",
                 "WEB-101 Login button not working was assigned to you by Arun Kumar", bug101.getId(), "WEB", "ASSIGNMENT"));
         notificationRepository.save(new Notification(managerArun.getId(), "Fix Submitted for Review",
-                "MOB-201 Push notification crash fix was submitted by Karthi Raman", bug201.getId(), "MOB", "REVIEW_REQUEST"));
+                "MOB-101 Push notification crash fix was submitted by Karthi Raman", bug201.getId(), "MOB", "REVIEW_REQUEST"));
 
         // 7. Audit Logs
         auditLogRepository.save(new AuditLog(superAdmin.getId(), superAdmin.getFullName(),
-                "SYSTEM_INITIALIZATION", "SYSTEM", "0", "DevTrack organizational hierarchy initialized"));
+                "SYSTEM_INITIALIZATION", "SYSTEM", "0", "DevTrack demo organization initialized"));
         auditLogRepository.save(new AuditLog(admin.getId(), admin.getFullName(),
                 "PROJECT_CREATED", "PROJECT", projWeb.getId().toString(), "Admin created project Website Development"));
 
-        System.out.println("DevTrack initialization complete! Ready for Admin, Manager, and Employee.");
+        log.info("Demo data loaded. Demo accounts are listed in README.md (change their passwords for shared use).");
+    }
+
+    private Project newProject(String key, String name, String description, User owner,
+                               int startedDaysAgo, int endsInDays, int nextIssueNumber) {
+        Project p = new Project(key, name, description, owner.getId(),
+                LocalDate.now().minusDays(startedDaysAgo), LocalDate.now().plusDays(endsInDays));
+        p.setNextIssueNumber(nextIssueNumber);
+        return projectRepository.save(p);
+    }
+
+    private void member(Project project, User user, ProjectRole role) {
+        projectMemberRepository.save(new ProjectMember(project.getId(), user.getId(), role));
     }
 }

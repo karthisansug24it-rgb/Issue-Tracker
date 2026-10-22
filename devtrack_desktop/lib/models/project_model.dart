@@ -7,7 +7,9 @@ class ProjectModel {
   final int ownerId;
   final String ownerName;
   final int totalIssues;
-  final int openIssues;
+  final int openIssues; // unresolved: everything except RESOLVED / CLOSED
+  final bool canManage; // may manage members of this project
+  final bool canAssign; // may assign issues in this project
 
   ProjectModel({
     required this.id,
@@ -19,6 +21,8 @@ class ProjectModel {
     this.ownerName = '',
     this.totalIssues = 0,
     this.openIssues = 0,
+    this.canManage = false,
+    this.canAssign = false,
   });
 
   factory ProjectModel.fromJson(Map<String, dynamic> json) {
@@ -32,6 +36,8 @@ class ProjectModel {
       ownerName: json['ownerName'] ?? '',
       totalIssues: json['totalIssues'] ?? 0,
       openIssues: json['openIssues'] ?? 0,
+      canManage: json['canManage'] ?? false,
+      canAssign: json['canAssign'] ?? false,
     );
   }
 
@@ -46,6 +52,8 @@ class ProjectModel {
       'ownerName': ownerName,
       'totalIssues': totalIssues,
       'openIssues': openIssues,
+      'canManage': canManage,
+      'canAssign': canAssign,
     };
   }
 }

@@ -20,12 +20,20 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
   }
 
   Future<void> _loadLogs() async {
-    final logs = await ApiService.instance.getAuditLogs();
-    if (mounted) {
+    setState(() => _isLoading = true);
+    try {
+      final logs = await ApiService.instance.getAuditLogs();
+      if (!mounted) return;
       setState(() {
         _logs = logs;
         _isLoading = false;
       });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(backgroundColor: Colors.red.shade800, content: Text('Error loading audit logs: $e')),
+      );
     }
   }
 

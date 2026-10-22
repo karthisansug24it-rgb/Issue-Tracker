@@ -65,18 +65,9 @@ class _UsersScreenState extends State<UsersScreen> {
     }
   }
 
-  bool _canModifyUser(UserModel target) {
-    if (AuthState.instance.isSuperAdmin) return true;
-    if (AuthState.instance.isAdmin) {
-      // Admins cannot modify Super Admin
-      return target.role != 'SUPER_ADMIN';
-    }
-    if (AuthState.instance.isManager) {
-      // Managers can only modify Team Leads and Employees
-      return target.role == 'EMPLOYEE' || target.role == 'TEAM_LEAD';
-    }
-    return false;
-  }
+  // The server decides (same rules as the API): no self-changes, Super Admin manages
+  // everyone, Admin manages up to Manager, Manager manages Team Leads and Employees.
+  bool _canModifyUser(UserModel target) => target.canModify;
 
   Future<void> _showUpgradeRoleDialog(UserModel user) async {
     String selectedRole = user.role;
@@ -121,8 +112,8 @@ class _UsersScreenState extends State<UsersScreen> {
       final rank = r['rank'] as int;
       if (AuthState.instance.isSuperAdmin) return true;
       if (AuthState.instance.isAdmin) {
-        // Admin can assign Admin, Manager, Team Lead, Employee (NO Super Admin)
-        return rank <= 4;
+        // Admin can assign Manager, Team Lead, Employee (Admins are managed by Super Admins)
+        return rank <= 3;
       }
       if (AuthState.instance.isManager) {
         // Manager can ONLY assign Team Lead and Employee (NO Super Admin, Admin, Manager)
@@ -185,9 +176,11 @@ class _UsersScreenState extends State<UsersScreen> {
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                AuthState.instance.isManager && !AuthState.instance.isAdmin
-                                    ? 'Manager Scope: You can assign Team Lead and Employee roles only.'
-                                    : 'Select a permission level strictly within authorized hierarchy.',
+                                AuthState.instance.isSuperAdmin
+                                    ? 'Super Admin Scope: You can assign any role, including Admin and Super Admin.'
+                                    : AuthState.instance.isAdmin
+                                        ? 'Admin Scope: You can assign Manager, Team Lead and Employee roles.'
+                                        : 'Manager Scope: You can assign Team Lead and Employee roles only.',
                                 style: TextStyle(fontSize: 11, color: Colors.blue.shade900, fontWeight: FontWeight.w500),
                               ),
                             ),
@@ -326,6 +319,52 @@ class _UsersScreenState extends State<UsersScreen> {
           ),
         );
       }
+    }
+  }
+
+  bool canToggleStatus(UserModel u) =>
+      u.canModify && AuthState.instance.hasPermission('USER_STATUS_MANAGE');
+
+  Future<void> _confirmToggleStatus(UserModel user) async {
+    final disabling = user.active;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(disabling ? 'Disable account?' : 'Enable account?'),
+        content: Text(disabling
+            ? '${user.fullName} will be signed out and will not be able to sign in until re-enabled.'
+            : '${user.fullName} will be able to sign in again.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: disabling ? Colors.red.shade700 : Colors.green.shade700,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(disabling ? 'Disable' : 'Enable'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final updated = await ApiService.instance.toggleUserStatus(user.id);
+      if (!mounted) return;
+      setState(() {
+        final index = _users.indexWhere((u) => u.id == user.id);
+        if (index != -1) _users[index] = updated;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        backgroundColor: Colors.green.shade800,
+        content: Text('${user.fullName} is now ${updated.active ? 'enabled' : 'disabled'}.'),
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        backgroundColor: Colors.red.shade800,
+        content: Text('Failed to change account status: $e'),
+      ));
     }
   }
 
@@ -572,19 +611,38 @@ class _UsersScreenState extends State<UsersScreen> {
                                             ),
                                           const SizedBox(width: 8),
                                         ],
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                          decoration: BoxDecoration(
-                                            color: u.active ? Colors.green.shade50 : Colors.grey.shade100,
+                                        Tooltip(
+                                          message: canToggleStatus(u)
+                                              ? (u.active ? 'Click to disable this account' : 'Click to enable this account')
+                                              : '',
+                                          child: InkWell(
+                                            onTap: canToggleStatus(u) ? () => _confirmToggleStatus(u) : null,
                                             borderRadius: BorderRadius.circular(4),
-                                            border: Border.all(color: u.active ? Colors.green.shade300 : Colors.grey.shade400),
-                                          ),
-                                          child: Text(
-                                            u.active ? 'Active' : 'Disabled',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w600,
-                                              color: u.active ? Colors.green.shade800 : Colors.grey.shade700,
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: u.active ? Colors.green.shade50 : Colors.grey.shade100,
+                                                borderRadius: BorderRadius.circular(4),
+                                                border: Border.all(color: u.active ? Colors.green.shade300 : Colors.grey.shade400),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Text(
+                                                    u.active ? 'Active' : 'Disabled',
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      fontWeight: FontWeight.w600,
+                                                      color: u.active ? Colors.green.shade800 : Colors.grey.shade700,
+                                                    ),
+                                                  ),
+                                                  if (canToggleStatus(u)) ...[
+                                                    const SizedBox(width: 4),
+                                                    Icon(Icons.power_settings_new, size: 12,
+                                                        color: u.active ? Colors.green.shade800 : Colors.grey.shade700),
+                                                  ],
+                                                ],
+                                              ),
                                             ),
                                           ),
                                         ),

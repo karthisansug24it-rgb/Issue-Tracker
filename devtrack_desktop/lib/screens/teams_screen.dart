@@ -55,13 +55,12 @@ class _TeamsScreenState extends State<TeamsScreen> {
         // If the logged-in user is an Admin (not Super Admin) and hasn't selected a dept yet,
         // scope by their department
         final currentUser = AuthState.instance.currentUser;
+        // Match on the real department id; if the user has none, show everything
+        // instead of silently picking an unrelated department.
         if (_selectedDepartmentId == null && currentUser != null && !AuthState.instance.isSuperAdmin) {
-          final matchingDept = _departments.firstWhere(
-            (d) => d.name.toLowerCase() == currentUser.department.toLowerCase(),
-            orElse: () => _departments.isNotEmpty ? _departments.first : DepartmentModel(id: 0, name: '', code: ''),
-          );
-          if (matchingDept.id != 0) {
-            _selectedDepartmentId = matchingDept.id;
+          final deptId = currentUser.departmentId;
+          if (deptId != null && _departments.any((d) => d.id == deptId)) {
+            _selectedDepartmentId = deptId;
           }
         }
       });
@@ -72,6 +71,16 @@ class _TeamsScreenState extends State<TeamsScreen> {
         SnackBar(backgroundColor: Colors.red.shade800, content: Text('Error loading organization data: $e')),
       );
     }
+  }
+
+  // Mirrors the server rules: admins manage every team, managers only the teams they manage.
+  bool get _canCreateTeam => AuthState.instance.isManager;
+
+  bool _canManageTeam(TeamModel team) {
+    final me = AuthState.instance.currentUser;
+    if (me == null) return false;
+    if (AuthState.instance.isAdmin) return true;
+    return me.role == 'MANAGER' && team.managerId == me.id;
   }
 
   List<TeamModel> get _filteredTeams {
@@ -117,7 +126,10 @@ class _TeamsScreenState extends State<TeamsScreen> {
         defaultDeptId ??
         _selectedDepartmentId ??
         (_departments.isNotEmpty ? _departments.first.id : 1);
-    int? selectedManagerId = team?.managerId;
+    final me = AuthState.instance.currentUser!;
+    final canChangeManager = AuthState.instance.isAdmin;
+    // Managers create teams they manage themselves
+    int? selectedManagerId = team?.managerId ?? (canChangeManager ? null : me.id);
     int? selectedTeamLeadId = team?.teamLeadId;
 
     await showDialog(
@@ -130,15 +142,16 @@ class _TeamsScreenState extends State<TeamsScreen> {
             // Manager candidates: MANAGER, ADMIN, SUPER_ADMIN
             // If current logged-in user is a MANAGER (not ADMIN/SUPER_ADMIN), filter out SUPER_ADMIN & ADMIN
             final managerCandidates = activeUsers.where((u) {
-              if (AuthState.instance.isManager && !AuthState.instance.isAdmin) {
-                return u.role == 'MANAGER';
+              if (!canChangeManager) {
+                return u.id == selectedManagerId; // fixed: only admins can change a team's manager
               }
               return u.role == 'MANAGER' || u.role == 'ADMIN' || u.role == 'SUPER_ADMIN';
             }).toList();
 
             // Team Lead candidates: TEAM_LEAD, EMPLOYEE, or MANAGER
+            // Team leads must hold the Team Lead (or Manager) role; promote employees first
             final leadCandidates = activeUsers.where((u) {
-              return u.role == 'TEAM_LEAD' || u.role == 'EMPLOYEE' || u.role == 'MANAGER';
+              return u.role == 'TEAM_LEAD' || u.role == 'MANAGER';
             }).toList();
 
             return AlertDialog(
@@ -243,7 +256,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
                               ),
                             ],
                           ),
-                          if (selectedManagerId != null)
+                          if (selectedManagerId != null && canChangeManager)
                             TextButton(
                               style: TextButton.styleFrom(visualDensity: VisualDensity.compact, padding: EdgeInsets.zero),
                               onPressed: () => setDialogState(() => selectedManagerId = null),
@@ -286,7 +299,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
                             );
                           }),
                         ],
-                        onChanged: (val) {
+                        onChanged: !canChangeManager ? null : (val) {
                           setDialogState(() => selectedManagerId = val);
                         },
                       ),
@@ -592,7 +605,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
     int? selectedLeadId = team.teamLeadId;
 
     final leadCandidates = activeUsers.where((u) {
-      return u.role == 'TEAM_LEAD' || u.role == 'EMPLOYEE' || u.role == 'MANAGER';
+      return u.role == 'TEAM_LEAD' || u.role == 'MANAGER';
     }).toList();
 
     await showDialog(
@@ -724,6 +737,8 @@ class _TeamsScreenState extends State<TeamsScreen> {
 
   // 3. Manage Team Members Dialog
   Future<void> _showManageMembersDialog(TeamModel team) async {
+    final canManage = _canManageTeam(team);
+    int? userToAddId; // kept outside the builder so the selection survives rebuilds
     await showDialog(
       context: context,
       builder: (dialogCtx) {
@@ -731,7 +746,9 @@ class _TeamsScreenState extends State<TeamsScreen> {
           builder: (sbCtx, setDialogState) {
             final currentMemberIds = team.members.map((m) => m.id).toSet();
             final availableUsers = _users.where((u) => u.active && !currentMemberIds.contains(u.id)).toList();
-            int? userToAddId = availableUsers.isNotEmpty ? availableUsers.first.id : null;
+            if (userToAddId == null || !availableUsers.any((u) => u.id == userToAddId)) {
+              userToAddId = availableUsers.isNotEmpty ? availableUsers.first.id : null;
+            }
 
             return AlertDialog(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -759,7 +776,8 @@ class _TeamsScreenState extends State<TeamsScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Add Member Box
+                    // Add Member Box (only for people who manage this team)
+                    if (canManage) ...[
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
@@ -824,6 +842,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
+                    ],
 
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -849,6 +868,8 @@ class _TeamsScreenState extends State<TeamsScreen> {
                               itemBuilder: (itemCtx, idx) {
                                 final member = team.members[idx];
                                 final isLead = member.id == team.teamLeadId;
+                                // Manager and lead must be changed on the team before removal
+                                final canRemove = canManage && member.id != team.managerId && !isLead;
 
                                 return ListTile(
                                   dense: true,
@@ -877,7 +898,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
                                     ],
                                   ),
                                   subtitle: Text('${member.email} · ${member.jobTitle}', style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
-                                  trailing: IconButton(
+                                  trailing: !canRemove ? null : IconButton(
                                     icon: const Icon(Icons.remove_circle_outline, color: Colors.red, size: 20),
                                     tooltip: 'Remove from group',
                                     onPressed: () async {
@@ -1225,7 +1246,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
                           tooltip: 'Reload from Database',
                           onPressed: _loadData,
                         ),
-                        if (isAdminOrSuper) ...[
+                        if (isAdminOrSuper)
                           OutlinedButton.icon(
                             icon: const Icon(Icons.domain_add, size: 16),
                             label: Text(isMobile ? 'Dept' : 'Add Department'),
@@ -1235,6 +1256,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
                             ),
                             onPressed: () => _showDepartmentDialog(),
                           ),
+                        if (_canCreateTeam)
                           ElevatedButton.icon(
                             icon: const Icon(Icons.group_add, size: 16),
                             label: Text(isMobile ? 'Group' : 'Create Team / Group'),
@@ -1245,7 +1267,6 @@ class _TeamsScreenState extends State<TeamsScreen> {
                             ),
                             onPressed: () => _showTeamDialog(),
                           ),
-                        ],
                       ],
                     ),
                   ],
@@ -1547,7 +1568,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
                       : 'Groups in ${_departments.firstWhere((d) => d.id == _selectedDepartmentId, orElse: () => DepartmentModel(id: 0, name: 'Selected Dept', code: '')).name} (${_filteredTeams.length})',
                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
-                if (isAdminOrSuper)
+                if (_canCreateTeam)
                   TextButton.icon(
                     icon: const Icon(Icons.add, size: 16),
                     label: Text(
@@ -1575,7 +1596,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
                             style: TextStyle(color: Colors.grey.shade600),
                           ),
                           const SizedBox(height: 12),
-                          if (isAdminOrSuper)
+                          if (_canCreateTeam)
                             ElevatedButton.icon(
                               icon: const Icon(Icons.group_add, size: 16),
                               label: const Text('Create New Group / Team'),
@@ -1731,7 +1752,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
                                         constraints: const BoxConstraints(),
                                         onPressed: () => ClipboardHelper.copy(context, team.teamLeadName!, label: 'Team Lead'),
                                       ),
-                                    if (isAdminOrSuper)
+                                    if (_canManageTeam(team))
                                       InkWell(
                                         onTap: () => _showQuickAssignLeadDialog(team),
                                         borderRadius: BorderRadius.circular(4),
@@ -1776,18 +1797,18 @@ class _TeamsScreenState extends State<TeamsScreen> {
                                       tooltip: 'Members ($memberCount)',
                                       onPressed: () => _showManageMembersDialog(team),
                                     ),
-                                    if (isAdminOrSuper) ...[
+                                    if (_canManageTeam(team))
                                       IconButton(
                                         icon: const Icon(Icons.edit_outlined, size: 18, color: Color(0xFF1E40AF)),
                                         tooltip: 'Edit Group',
                                         onPressed: () => _showTeamDialog(team: team),
                                       ),
+                                    if (isAdminOrSuper)
                                       IconButton(
                                         icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
                                         tooltip: 'Delete Group',
                                         onPressed: () => _deleteTeam(team),
                                       ),
-                                    ],
                                   ],
                                 )
                               : Row(
@@ -1803,18 +1824,18 @@ class _TeamsScreenState extends State<TeamsScreen> {
                                       onPressed: () => _showManageMembersDialog(team),
                                     ),
                                     const SizedBox(width: 8),
-                                    if (isAdminOrSuper) ...[
+                                    if (_canManageTeam(team))
                                       IconButton(
                                         icon: const Icon(Icons.edit_outlined, size: 20, color: Color(0xFF1E40AF)),
                                         tooltip: 'Edit Group & Details',
                                         onPressed: () => _showTeamDialog(team: team),
                                       ),
+                                    if (isAdminOrSuper)
                                       IconButton(
                                         icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
                                         tooltip: 'Delete Group',
                                         onPressed: () => _deleteTeam(team),
                                       ),
-                                    ],
                                   ],
                                 ),
                         );

@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -16,6 +17,7 @@ import java.util.Optional;
 public interface IssueRepository extends JpaRepository<Issue, Long>, JpaSpecificationExecutor<Issue> {
     Optional<Issue> findByIssueKey(String issueKey);
     List<Issue> findByProjectId(Long projectId);
+    List<Issue> findByProjectIdIn(Collection<Long> projectIds);
     List<Issue> findByAssigneeId(Long assigneeId);
     List<Issue> findByReporterId(Long reporterId);
     List<Issue> findByStatus(IssueStatus status);

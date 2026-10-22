@@ -1,20 +1,22 @@
 package com.devtrack.service;
 
 import com.devtrack.dto.DepartmentDto;
+import com.devtrack.dto.DepartmentRequest;
 import com.devtrack.dto.TeamDto;
+import com.devtrack.dto.TeamRequest;
 import com.devtrack.dto.UserDto;
-import com.devtrack.model.Department;
-import com.devtrack.model.Team;
-import com.devtrack.model.TeamMember;
-import com.devtrack.model.User;
-import com.devtrack.repository.DepartmentRepository;
-import com.devtrack.repository.TeamMemberRepository;
-import com.devtrack.repository.TeamRepository;
-import com.devtrack.repository.UserRepository;
+import com.devtrack.exception.BadRequestException;
+import com.devtrack.exception.ConflictException;
+import com.devtrack.exception.ForbiddenException;
+import com.devtrack.exception.NotFoundException;
+import com.devtrack.model.*;
+import com.devtrack.repository.*;
+import com.devtrack.security.AccessService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -25,46 +27,124 @@ public class OrganizationService {
     private final TeamRepository teamRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final UserRepository userRepository;
+    private final AuditLogRepository auditLogRepository;
+    private final AccessService accessService;
 
     public OrganizationService(DepartmentRepository departmentRepository,
                                TeamRepository teamRepository,
                                TeamMemberRepository teamMemberRepository,
-                               UserRepository userRepository) {
+                               UserRepository userRepository,
+                               AuditLogRepository auditLogRepository,
+                               AccessService accessService) {
         this.departmentRepository = departmentRepository;
         this.teamRepository = teamRepository;
         this.teamMemberRepository = teamMemberRepository;
         this.userRepository = userRepository;
+        this.auditLogRepository = auditLogRepository;
+        this.accessService = accessService;
     }
 
-    // Departments
+    // ------------------------------------------------------------ departments
+
+    /** Finds a department by name or code (case-insensitive). */
+    public Optional<Department> findDepartment(String nameOrCode) {
+        if (nameOrCode == null || nameOrCode.isBlank()) {
+            return Optional.empty();
+        }
+        String value = nameOrCode.trim();
+        return departmentRepository.findByNameIgnoreCase(value)
+                .or(() -> departmentRepository.findByCodeIgnoreCase(value));
+    }
+
+    /**
+     * Links the user to a real department when the text matches one; otherwise keeps the
+     * free-text value so nothing typed at registration is lost.
+     */
+    public void applyDepartment(User user, String departmentText) {
+        Optional<Department> dept = findDepartment(departmentText);
+        if (dept.isPresent()) {
+            user.setDepartmentId(dept.get().getId());
+            user.setDepartment(dept.get().getName());
+        } else {
+            user.setDepartmentId(null);
+            user.setDepartment(departmentText != null && !departmentText.isBlank() ? departmentText.trim() : null);
+        }
+    }
+
     public List<DepartmentDto> getAllDepartments() {
         return departmentRepository.findAll().stream()
                 .map(DepartmentDto::fromEntity)
                 .collect(Collectors.toList());
     }
 
-    public DepartmentDto createDepartment(Department dept) {
+    @Transactional
+    public DepartmentDto createDepartment(DepartmentRequest request, User actor) {
+        String name = request.getName().trim();
+        String code = request.getCode().trim().toUpperCase();
+        if (departmentRepository.findByNameIgnoreCase(name).isPresent()) {
+            throw new ConflictException("A department named '" + name + "' already exists.");
+        }
+        if (departmentRepository.findByCodeIgnoreCase(code).isPresent()) {
+            throw new ConflictException("Department code '" + code + "' is already used.");
+        }
+        Department dept = new Department(name, code, request.getDescription());
+        if (request.getActive() != null) {
+            dept.setActive(request.getActive());
+        }
         Department saved = departmentRepository.save(dept);
+        audit(actor, "DEPARTMENT_CREATED", "DEPARTMENT", saved.getId(), "Created department " + name + " (" + code + ")");
         return DepartmentDto.fromEntity(saved);
     }
 
     @Transactional
-    public DepartmentDto updateDepartment(Long id, Department update) {
+    public DepartmentDto updateDepartment(Long id, DepartmentRequest request, User actor) {
         Department dept = departmentRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Department not found with id: " + id));
-        if (update.getName() != null && !update.getName().isBlank()) dept.setName(update.getName().trim());
-        if (update.getCode() != null && !update.getCode().isBlank()) dept.setCode(update.getCode().trim().toUpperCase());
-        if (update.getDescription() != null) dept.setDescription(update.getDescription());
-        dept.setActive(update.isActive());
-        return DepartmentDto.fromEntity(departmentRepository.save(dept));
+                .orElseThrow(() -> new NotFoundException("Department not found: " + id));
+        String name = request.getName().trim();
+        String code = request.getCode().trim().toUpperCase();
+
+        departmentRepository.findByNameIgnoreCase(name).filter(d -> !d.getId().equals(id)).ifPresent(d -> {
+            throw new ConflictException("A department named '" + name + "' already exists.");
+        });
+        departmentRepository.findByCodeIgnoreCase(code).filter(d -> !d.getId().equals(id)).ifPresent(d -> {
+            throw new ConflictException("Department code '" + code + "' is already used.");
+        });
+
+        boolean renamed = !dept.getName().equals(name);
+        dept.setName(name);
+        dept.setCode(code);
+        dept.setDescription(request.getDescription());
+        if (request.getActive() != null) {
+            dept.setActive(request.getActive());
+        }
+        Department saved = departmentRepository.save(dept);
+
+        if (renamed) {
+            // Keep the denormalised department name on users in sync
+            List<User> users = userRepository.findByDepartmentId(id);
+            users.forEach(u -> u.setDepartment(name));
+            userRepository.saveAll(users);
+        }
+        audit(actor, "DEPARTMENT_UPDATED", "DEPARTMENT", id, "Updated department " + name + " (" + code + ")");
+        return DepartmentDto.fromEntity(saved);
     }
 
     @Transactional
-    public void deleteDepartment(Long id) {
-        departmentRepository.deleteById(id);
+    public void deleteDepartment(Long id, User actor) {
+        Department dept = departmentRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Department not found: " + id));
+        if (teamRepository.existsByDepartmentId(id)) {
+            throw new ConflictException("Move or delete the teams in " + dept.getName() + " before deleting it.");
+        }
+        if (userRepository.existsByDepartmentId(id)) {
+            throw new ConflictException("Users still belong to " + dept.getName() + ". Reassign them before deleting it.");
+        }
+        departmentRepository.delete(dept);
+        audit(actor, "DEPARTMENT_DELETED", "DEPARTMENT", id, "Deleted department " + dept.getName());
     }
 
-    // Teams
+    // ------------------------------------------------------------------ teams
+
     public List<TeamDto> getAllTeams() {
         return teamRepository.findAll().stream()
                 .map(this::mapToTeamDto)
@@ -78,58 +158,135 @@ public class OrganizationService {
     }
 
     @Transactional
-    public TeamDto createTeam(Team team) {
+    public TeamDto createTeam(TeamRequest request, User actor) {
+        requireDepartment(request.getDepartmentId());
+
+        Long managerId = request.getManagerId();
+        if (!accessService.isAdmin(actor)) {
+            // Managers can only create teams that they manage themselves
+            if (managerId != null && !managerId.equals(actor.getId())) {
+                throw new ForbiddenException("Managers can only create teams they manage themselves.");
+            }
+            managerId = actor.getId();
+        }
+        validateManager(managerId);
+        validateTeamLead(request.getTeamLeadId());
+
+        Team team = new Team(request.getName().trim(), request.getDepartmentId(), managerId,
+                request.getTeamLeadId(), request.getDescription());
+        if (request.getActive() != null) {
+            team.setActive(request.getActive());
+        }
         Team saved = teamRepository.save(team);
-        // Ensure assigned Manager is registered in team members
-        if (saved.getManagerId() != null) {
-            addMemberToTeam(saved.getId(), saved.getManagerId());
-        }
-        // Ensure assigned Team Lead is registered in team members
-        if (saved.getTeamLeadId() != null) {
-            addMemberToTeam(saved.getId(), saved.getTeamLeadId());
-        }
+        ensureMember(saved.getId(), saved.getManagerId());
+        ensureMember(saved.getId(), saved.getTeamLeadId());
+
+        audit(actor, "TEAM_CREATED", "TEAM", saved.getId(), "Created team " + saved.getName());
         return mapToTeamDto(saved);
     }
 
     @Transactional
-    public TeamDto updateTeam(Long id, Team update) {
+    public TeamDto updateTeam(Long id, TeamRequest request, User actor) {
+        Team team = requireManageableTeam(id, actor);
+        requireDepartment(request.getDepartmentId());
+
+        if (!accessService.isAdmin(actor) && !Objects.equals(request.getManagerId(), team.getManagerId())) {
+            throw new ForbiddenException("Only admins can change a team's manager.");
+        }
+        validateManager(request.getManagerId());
+        validateTeamLead(request.getTeamLeadId());
+
+        team.setName(request.getName().trim());
+        team.setDescription(request.getDescription());
+        team.setDepartmentId(request.getDepartmentId());
+        team.setManagerId(request.getManagerId());
+        team.setTeamLeadId(request.getTeamLeadId());
+        if (request.getActive() != null) {
+            team.setActive(request.getActive());
+        }
+        Team saved = teamRepository.save(team);
+        ensureMember(id, saved.getManagerId());
+        ensureMember(id, saved.getTeamLeadId());
+
+        audit(actor, "TEAM_UPDATED", "TEAM", id, "Updated team " + saved.getName());
+        return mapToTeamDto(saved);
+    }
+
+    @Transactional
+    public void deleteTeam(Long id, User actor) {
         Team team = teamRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Team not found with id: " + id));
-        if (update.getName() != null && !update.getName().isBlank()) team.setName(update.getName().trim());
-        if (update.getDescription() != null) team.setDescription(update.getDescription());
-        if (update.getDepartmentId() != null) team.setDepartmentId(update.getDepartmentId());
-        team.setManagerId(update.getManagerId());
-        team.setTeamLeadId(update.getTeamLeadId());
-        team.setActive(update.isActive());
-
-        // Automatically ensure both manager and team lead are members of the team
-        if (update.getManagerId() != null) {
-            addMemberToTeam(id, update.getManagerId());
-        }
-        if (update.getTeamLeadId() != null) {
-            addMemberToTeam(id, update.getTeamLeadId());
-        }
-
-        Team saved = teamRepository.save(team);
-        return mapToTeamDto(saved);
-    }
-
-    @Transactional
-    public void deleteTeam(Long id) {
+                .orElseThrow(() -> new NotFoundException("Team not found: " + id));
         teamMemberRepository.deleteByTeamId(id);
-        teamRepository.deleteById(id);
+        teamRepository.delete(team);
+        audit(actor, "TEAM_DELETED", "TEAM", id, "Deleted team " + team.getName());
     }
 
     @Transactional
-    public void addMemberToTeam(Long teamId, Long userId) {
-        if (teamMemberRepository.findByTeamIdAndUserId(teamId, userId).isEmpty()) {
+    public void addMemberToTeam(Long teamId, Long userId, User actor) {
+        Team team = requireManageableTeam(teamId, actor);
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new NotFoundException("User not found: " + userId));
+        if (!user.isActive()) {
+            throw new BadRequestException("Cannot add a disabled user to a team.");
+        }
+        ensureMember(teamId, userId);
+        audit(actor, "TEAM_MEMBER_ADDED", "TEAM", teamId, "Added " + user.getFullName() + " to " + team.getName());
+    }
+
+    @Transactional
+    public void removeMemberFromTeam(Long teamId, Long userId, User actor) {
+        Team team = requireManageableTeam(teamId, actor);
+        if (userId.equals(team.getManagerId()) || userId.equals(team.getTeamLeadId())) {
+            throw new BadRequestException("Change the team's manager or lead before removing them from the team.");
+        }
+        teamMemberRepository.deleteByTeamIdAndUserId(teamId, userId);
+        audit(actor, "TEAM_MEMBER_REMOVED", "TEAM", teamId, "Removed user " + userId + " from " + team.getName());
+    }
+
+    // ---------------------------------------------------------------- helpers
+
+    private Team requireManageableTeam(Long id, User actor) {
+        Team team = teamRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Team not found: " + id));
+        if (!accessService.canManageTeam(actor, team)) {
+            throw new ForbiddenException("You can only manage teams that you manage.");
+        }
+        return team;
+    }
+
+    private void requireDepartment(Long departmentId) {
+        if (departmentId == null || !departmentRepository.existsById(departmentId)) {
+            throw new BadRequestException("Department not found: " + departmentId);
+        }
+    }
+
+    private void validateManager(Long managerId) {
+        if (managerId == null) return;
+        User manager = userRepository.findById(managerId)
+                .orElseThrow(() -> new BadRequestException("Manager not found: " + managerId));
+        if (!manager.isActive() || !manager.getRole().isAtLeast(RoleType.MANAGER)) {
+            throw new BadRequestException("Team manager must be an active Manager, Admin or Super Admin.");
+        }
+    }
+
+    private void validateTeamLead(Long teamLeadId) {
+        if (teamLeadId == null) return;
+        User lead = userRepository.findById(teamLeadId)
+                .orElseThrow(() -> new BadRequestException("Team lead not found: " + teamLeadId));
+        if (!lead.isActive() || !(lead.getRole() == RoleType.TEAM_LEAD || lead.getRole() == RoleType.MANAGER)) {
+            throw new BadRequestException("Team lead must be an active user with the Team Lead or Manager role.");
+        }
+    }
+
+    private void ensureMember(Long teamId, Long userId) {
+        if (userId != null && teamMemberRepository.findByTeamIdAndUserId(teamId, userId).isEmpty()) {
             teamMemberRepository.save(new TeamMember(teamId, userId));
         }
     }
 
-    @Transactional
-    public void removeMemberFromTeam(Long teamId, Long userId) {
-        teamMemberRepository.deleteByTeamIdAndUserId(teamId, userId);
+    private void audit(User actor, String action, String entityType, Long entityId, String details) {
+        auditLogRepository.save(new AuditLog(actor.getId(), actor.getFullName(), action, entityType,
+                String.valueOf(entityId), details));
     }
 
     private TeamDto mapToTeamDto(Team team) {
@@ -163,10 +320,9 @@ public class OrganizationService {
                     });
         }
 
-        List<UserDto> members = teamMemberRepository.findByTeamId(team.getId()).stream()
-                .map(tm -> userRepository.findById(tm.getUserId()))
-                .filter(Optional::isPresent)
-                .map(Optional::get)
+        List<Long> memberIds = teamMemberRepository.findByTeamId(team.getId()).stream()
+                .map(TeamMember::getUserId).toList();
+        List<UserDto> members = userRepository.findAllById(memberIds).stream()
                 .map(UserDto::fromEntity)
                 .collect(Collectors.toList());
         dto.setMembers(members);

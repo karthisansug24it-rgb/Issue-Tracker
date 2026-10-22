@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/auth_state.dart';
+import '../services/api_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -25,7 +26,8 @@ class _LoginScreenState extends State<LoginScreen> {
   String _selectedDepartment = 'Engineering';
   final _jobTitleController = TextEditingController(text: 'Software Engineer');
 
-  final List<String> _departments = [
+  // Fallback list; replaced by the server's departments when reachable
+  List<String> _departments = [
     'Engineering',
     'Quality Assurance',
     'Operations & Support',
@@ -33,6 +35,28 @@ class _LoginScreenState extends State<LoginScreen> {
     'Design',
     'Security',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    // e.g. "Your session has expired..." after an automatic sign-out
+    _errorMessage = AuthState.instance.takeSessionMessage();
+    _loadDepartments();
+  }
+
+  Future<void> _loadDepartments() async {
+    try {
+      final depts = await ApiService.instance.getDepartments();
+      final names = depts.where((d) => d.active).map((d) => d.name).toList();
+      if (names.isEmpty || !mounted) return;
+      setState(() {
+        _departments = names;
+        if (!names.contains(_selectedDepartment)) _selectedDepartment = names.first;
+      });
+    } catch (_) {
+      // Keep the built-in list if the server is not reachable yet
+    }
+  }
 
   @override
   void dispose() {
@@ -86,8 +110,8 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() => _errorMessage = 'Please enter a valid email address');
       return;
     }
-    if (password.length < 6) {
-      setState(() => _errorMessage = 'Password must be at least 6 characters');
+    if (password.length < 8) {
+      setState(() => _errorMessage = 'Password must be at least 8 characters');
       return;
     }
     if (password != confirmPassword) {

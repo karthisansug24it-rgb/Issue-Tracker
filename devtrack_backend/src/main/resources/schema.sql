@@ -2,6 +2,10 @@
 -- DEVTRACK - Hierarchy-Based Issue Tracking & Project Management Schema
 -- Database: PostgreSQL 18
 -- Compatible with DBeaver SQL Editor
+--
+-- Reference DDL only. The application does not execute this file
+-- (spring.sql.init.mode=never); Hibernate keeps the tables up to date.
+-- The first Super Admin is created by DataLoader, never by this script.
 -- ====================================================================
 
 -- 1. USERS TABLE
@@ -10,8 +14,9 @@ CREATE TABLE IF NOT EXISTS users (
     full_name VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,
-    role VARCHAR(50) NOT NULL, -- SUPER_ADMIN, ADMIN, MANAGER, EMPLOYEE
-    department VARCHAR(100),
+    role VARCHAR(50) NOT NULL, -- SUPER_ADMIN, ADMIN, MANAGER, TEAM_LEAD, EMPLOYEE
+    department VARCHAR(100), -- display name, kept in sync with department_id
+    department_id BIGINT, -- references departments(id); added after departments exist
     job_title VARCHAR(100),
     avatar_url VARCHAR(500),
     active BOOLEAN DEFAULT TRUE NOT NULL,
@@ -33,7 +38,8 @@ CREATE TABLE IF NOT EXISTS departments (
 CREATE TABLE IF NOT EXISTS teams (
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
-    department_id BIGINT REFERENCES departments(id) ON DELETE SET NULL,
+    department_id BIGINT REFERENCES departments(id),
+    manager_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
     team_lead_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
     description VARCHAR(500),
     active BOOLEAN DEFAULT TRUE NOT NULL,
@@ -59,6 +65,7 @@ CREATE TABLE IF NOT EXISTS projects (
     owner_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
     start_date DATE,
     target_end_date DATE,
+    next_issue_number INT, -- counter for issue keys (WEB-101, WEB-102, ...)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -161,16 +168,8 @@ CREATE INDEX IF NOT EXISTS idx_issues_priority ON issues(priority);
 CREATE INDEX IF NOT EXISTS idx_project_members_user ON project_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON notifications(recipient_id);
 
--- DEFAULT SYSTEM SUPER ADMIN ACCOUNT
--- Email: superadmin@devtrack.com | Password: admin123
-INSERT INTO users (full_name, email, password, role, department, job_title, active)
-VALUES (
-    'Super Admin',
-    'superadmin@devtrack.com',
-    '$2a$10$f/9qS/U02tK1kL.aXUq4u.g8jC0i8u5O.F9r0g6gHh2z8H9iQ6UWe',
-    'SUPER_ADMIN',
-    'Executive',
-    'System Super Admin',
-    TRUE
-)
-ON CONFLICT (email) DO NOTHING;
+CREATE INDEX IF NOT EXISTS idx_users_department ON users(department_id);
+
+-- Link users to departments (users is created before departments above)
+ALTER TABLE users DROP CONSTRAINT IF EXISTS fk_users_department;
+ALTER TABLE users ADD CONSTRAINT fk_users_department FOREIGN KEY (department_id) REFERENCES departments(id);

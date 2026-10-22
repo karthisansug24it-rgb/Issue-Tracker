@@ -1,14 +1,32 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/project_model.dart';
+import '../models/project_member_model.dart';
 import '../models/issue_model.dart';
+import '../models/issue_activity_model.dart';
 import '../models/comment_model.dart';
 import '../models/audit_log_model.dart';
 import '../models/dashboard_metrics_model.dart';
+import '../models/notification_model.dart';
 import '../models/user_model.dart';
 import '../models/department_model.dart';
 import '../models/team_model.dart';
 import 'auth_state.dart';
+
+/// Error raised for any failed API call. [message] is already user friendly
+/// (taken from the server's "message" field when available).
+class ApiException implements Exception {
+  final int statusCode; // 0 when the server could not be reached
+  final String message;
+
+  ApiException(this.statusCode, this.message);
+
+  bool get isForbidden => statusCode == 403;
+
+  @override
+  String toString() => message;
+}
 
 class ApiService {
   static final ApiService instance = ApiService._internal();
@@ -19,37 +37,90 @@ class ApiService {
     defaultValue: 'http://localhost:8080/api/v1',
   );
 
-  Map<String, String> _headers() {
+  static const _timeout = Duration(seconds: 20);
+
+  Map<String, String> _headers({bool auth = true}) {
     final token = AuthState.instance.token;
     return {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-      if (token != null) 'Authorization': 'Bearer $token',
+      if (auth && token != null) 'Authorization': 'Bearer $token',
     };
   }
 
-  // 1. Authentication Login
-  Future<Map<String, dynamic>> login(String email, String password) async {
-    final url = Uri.parse('$baseUrl/auth/login');
-    final response = await http.post(
-      url,
-      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
-      body: jsonEncode({'email': email, 'password': password}),
+  /// Sends a request and returns the decoded JSON body (or null for empty bodies).
+  /// Throws [ApiException] on any failure. A 401 on an authenticated call means the
+  /// session is no longer valid, so the user is signed out.
+  Future<dynamic> _send(
+    String method,
+    String path, {
+    Map<String, String>? query,
+    Object? body,
+    bool auth = true,
+  }) async {
+    final uri = Uri.parse('$baseUrl$path').replace(
+      queryParameters: (query != null && query.isNotEmpty) ? query : null,
     );
+    final request = http.Request(method, uri)..headers.addAll(_headers(auth: auth));
+    if (body != null) request.body = jsonEncode(body);
 
-    if (response.statusCode == 200) {
+    http.Response response;
+    try {
+      response = await http.Response.fromStream(await request.send().timeout(_timeout));
+    } on TimeoutException {
+      throw ApiException(0, 'The DevTrack server did not respond in time. Please try again.');
+    } catch (_) {
+      throw ApiException(0, 'Cannot reach the DevTrack server at $baseUrl. Is the backend running?');
+    }
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      if (response.body.isEmpty) return null;
       return jsonDecode(response.body);
-    } else {
-      String errorMsg = 'Login failed (${response.statusCode})';
-      try {
-        final body = jsonDecode(response.body);
-        if (body['message'] != null) errorMsg = body['message'];
-      } catch (_) {}
-      throw Exception(errorMsg);
+    }
+
+    String message = _defaultMessage(response.statusCode);
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map && decoded['message'] is String && (decoded['message'] as String).isNotEmpty) {
+        message = decoded['message'];
+      }
+    } catch (_) {}
+
+    if (response.statusCode == 401 && auth && AuthState.instance.token != null) {
+      AuthState.instance.handleSessionExpired();
+    }
+    throw ApiException(response.statusCode, message);
+  }
+
+  String _defaultMessage(int status) {
+    switch (status) {
+      case 400:
+        return 'The request was invalid.';
+      case 401:
+        return 'Your session has expired. Please sign in again.';
+      case 403:
+        return 'You do not have permission to perform this action.';
+      case 404:
+        return 'The requested item was not found.';
+      case 409:
+        return 'This change conflicts with existing data.';
+      default:
+        return 'Server error ($status). Please try again.';
     }
   }
 
-  // 1b. Public Account Creation (Default role is basic user EMPLOYEE)
+  List<T> _list<T>(dynamic data, T Function(Map<String, dynamic>) parse) {
+    return (data as List).map((e) => parse(Map<String, dynamic>.from(e))).toList();
+  }
+
+  // 1. Authentication
+  Future<Map<String, dynamic>> login(String email, String password) async {
+    final data = await _send('POST', '/auth/login',
+        body: {'email': email, 'password': password}, auth: false);
+    return Map<String, dynamic>.from(data);
+  }
+
+  /// Public account creation. New accounts always start with the EMPLOYEE role.
   Future<Map<String, dynamic>> register({
     required String fullName,
     required String email,
@@ -57,89 +128,76 @@ class ApiService {
     String? department,
     String? jobTitle,
   }) async {
-    final url = Uri.parse('$baseUrl/auth/register');
-    final response = await http.post(
-      url,
-      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
-      body: jsonEncode({
-        'fullName': fullName.trim(),
-        'email': email.trim().toLowerCase(),
-        'password': password,
-        'department': department ?? 'Engineering',
-        'jobTitle': jobTitle ?? 'Employee',
-      }),
-    );
-
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body);
-    } else {
-      String errorMsg = 'Registration failed (${response.statusCode})';
-      try {
-        final body = jsonDecode(response.body);
-        if (body['message'] != null) errorMsg = body['message'];
-      } catch (_) {}
-      throw Exception(errorMsg);
-    }
+    final data = await _send('POST', '/auth/register', auth: false, body: {
+      'fullName': fullName.trim(),
+      'email': email.trim().toLowerCase(),
+      'password': password,
+      'department': department ?? 'Engineering',
+      'jobTitle': jobTitle ?? 'Employee',
+    });
+    return Map<String, dynamic>.from(data);
   }
 
-  // 2. Dashboard Metrics
-  Future<DashboardMetricsModel> getDashboardMetrics() async {
-    final url = Uri.parse('$baseUrl/dashboard/metrics');
-    final response = await http.get(url, headers: _headers());
+  /// Current user including the permission list.
+  Future<Map<String, dynamic>> getCurrentUserInfo() async {
+    return Map<String, dynamic>.from(await _send('GET', '/auth/me'));
+  }
 
-    if (response.statusCode == 200) {
-      return DashboardMetricsModel.fromJson(jsonDecode(response.body));
-    }
-    throw Exception('Failed to load dashboard metrics: ${response.statusCode}');
+  Future<UserModel> getCurrentUser() async {
+    return UserModel.fromJson(await getCurrentUserInfo());
+  }
+
+  Future<void> logout() async {
+    try {
+      await _send('POST', '/auth/logout', auth: false);
+    } catch (_) {}
+  }
+
+  // 2. Dashboard
+  Future<DashboardMetricsModel> getDashboardMetrics() async {
+    return DashboardMetricsModel.fromJson(await _send('GET', '/dashboard/metrics'));
   }
 
   // 3. Projects
   Future<List<ProjectModel>> getProjects() async {
-    final url = Uri.parse('$baseUrl/projects');
-    final response = await http.get(url, headers: _headers());
-
-    if (response.statusCode == 200) {
-      final List data = jsonDecode(response.body);
-      return data.map((e) => ProjectModel.fromJson(e)).toList();
-    }
-    throw Exception('Failed to load projects: ${response.statusCode}');
+    return _list(await _send('GET', '/projects'), ProjectModel.fromJson);
   }
 
   Future<ProjectModel> createProject(String key, String name, String desc) async {
-    final url = Uri.parse('$baseUrl/projects');
-    final response = await http.post(
-      url,
-      headers: _headers(),
-      body: jsonEncode({
-        'projectKey': key.toUpperCase(),
-        'name': name,
-        'description': desc,
-        'status': 'ACTIVE',
-      }),
-    );
+    final data = await _send('POST', '/projects', body: {
+      'projectKey': key.trim().toUpperCase(),
+      'name': name.trim(),
+      'description': desc.trim(),
+      'status': 'ACTIVE',
+    });
+    return ProjectModel.fromJson(data);
+  }
 
-    if (response.statusCode == 200) {
-      return ProjectModel.fromJson(jsonDecode(response.body));
-    }
-    throw Exception('Failed to create project: ${response.body}');
+  Future<List<ProjectMemberModel>> getProjectMembers(int projectId) async {
+    return _list(await _send('GET', '/projects/$projectId/members'), ProjectMemberModel.fromJson);
+  }
+
+  Future<void> addProjectMember(int projectId, int userId, String projectRole) async {
+    await _send('POST', '/projects/$projectId/members', body: {'userId': userId, 'projectRole': projectRole});
+  }
+
+  Future<void> removeProjectMember(int projectId, int userId) async {
+    await _send('DELETE', '/projects/$projectId/members/$userId');
   }
 
   // 4. Issues
-  Future<List<IssueModel>> getIssues({int? projectId, String? status, String? type, String? priority}) async {
-    final queryParams = <String, String>{};
-    if (projectId != null) queryParams['projectId'] = projectId.toString();
-    if (status != null && status != 'ALL') queryParams['status'] = status;
-    if (type != null && type != 'ALL') queryParams['type'] = type;
-    if (priority != null && priority != 'ALL') queryParams['priority'] = priority;
+  Future<List<IssueModel>> getIssues({int? projectId, String? status, String? type, String? priority, String? search}) async {
+    final query = <String, String>{};
+    if (projectId != null) query['projectId'] = projectId.toString();
+    if (status != null && status != 'ALL') query['status'] = status;
+    if (type != null && type != 'ALL') query['type'] = type;
+    if (priority != null && priority != 'ALL') query['priority'] = priority;
+    if (search != null && search.trim().isNotEmpty) query['search'] = search.trim();
+    return _list(await _send('GET', '/issues', query: query), IssueModel.fromJson);
+  }
 
-    final url = Uri.parse('$baseUrl/issues').replace(queryParameters: queryParams.isNotEmpty ? queryParams : null);
-    final response = await http.get(url, headers: _headers());
-
-    if (response.statusCode == 200) {
-      final List data = jsonDecode(response.body);
-      return data.map((e) => IssueModel.fromJson(e)).toList();
-    }
-    throw Exception('Failed to load issues: ${response.statusCode}');
+  Future<IssueModel> getIssue(int issueId) async {
+    return IssueModel.fromJson(await _send('GET', '/issues/$issueId'));
   }
 
   Future<IssueModel> createIssue({
@@ -152,153 +210,97 @@ class ApiService {
     String? dueDate,
     int estimatedMinutes = 0,
   }) async {
-    final url = Uri.parse('$baseUrl/issues');
-    final response = await http.post(
-      url,
-      headers: _headers(),
-      body: jsonEncode({
-        'projectId': projectId,
-        'title': title,
-        'description': description,
-        'type': type,
-        'priority': priority,
-        'assigneeId': assigneeId,
-        'dueDate': dueDate,
-        'estimatedMinutes': estimatedMinutes,
-      }),
-    );
-
-    if (response.statusCode == 200) {
-      return IssueModel.fromJson(jsonDecode(response.body));
-    }
-    throw Exception('Failed to create issue: ${response.body}');
+    final data = await _send('POST', '/issues', body: {
+      'projectId': projectId,
+      'title': title.trim(),
+      'description': description.trim(),
+      'type': type,
+      'priority': priority,
+      'assigneeId': assigneeId,
+      'dueDate': dueDate,
+      'estimatedMinutes': estimatedMinutes,
+    });
+    return IssueModel.fromJson(data);
   }
 
-  Future<void> updateIssueStatus(int issueId, String newStatus, {String? comment}) async {
-    final url = Uri.parse('$baseUrl/issues/$issueId/status');
-    final response = await http.patch(
-      url,
-      headers: _headers(),
-      body: jsonEncode({
-        'status': newStatus,
-        'comment': comment,
-      }),
-    );
-
-    if (response.statusCode != 200) {
-      throw Exception('Failed to update status: ${response.body}');
-    }
+  Future<IssueModel> updateIssueStatus(int issueId, String newStatus, {String? comment}) async {
+    final data = await _send('PATCH', '/issues/$issueId/status', body: {
+      'status': newStatus,
+      'comment': comment,
+    });
+    return IssueModel.fromJson(data);
   }
 
-  Future<void> reassignIssue(int issueId, int newAssigneeId) async {
-    final url = Uri.parse('$baseUrl/issues/$issueId/assignee');
-    final response = await http.patch(
-      url,
-      headers: _headers(),
-      body: jsonEncode({'assigneeId': newAssigneeId}),
-    );
+  /// Assigns the issue; pass null to unassign.
+  Future<IssueModel> assignIssue(int issueId, int? assigneeId) async {
+    final data = await _send('PATCH', '/issues/$issueId/assignee', body: {'assigneeId': assigneeId});
+    return IssueModel.fromJson(data);
+  }
 
-    if (response.statusCode != 200) {
-      throw Exception('Failed to reassign issue: ${response.body}');
-    }
+  Future<List<IssueHistoryModel>> getIssueHistory(int issueId) async {
+    return _list(await _send('GET', '/issues/$issueId/history'), IssueHistoryModel.fromJson);
   }
 
   // 5. Comments
   Future<List<CommentModel>> getComments(int issueId) async {
-    final url = Uri.parse('$baseUrl/issues/$issueId/comments');
-    final response = await http.get(url, headers: _headers());
-
-    if (response.statusCode == 200) {
-      final List data = jsonDecode(response.body);
-      return data.map((e) => CommentModel.fromJson(e)).toList();
-    }
-    return [];
+    return _list(await _send('GET', '/issues/$issueId/comments'), CommentModel.fromJson);
   }
 
   Future<CommentModel> addComment(int issueId, String text) async {
-    final url = Uri.parse('$baseUrl/issues/$issueId/comments');
-    final response = await http.post(
-      url,
-      headers: _headers(),
-      body: jsonEncode({'commentText': text}),
-    );
-
-    if (response.statusCode == 200) {
-      return CommentModel.fromJson(jsonDecode(response.body));
-    }
-    throw Exception('Failed to post comment: ${response.body}');
+    return CommentModel.fromJson(await _send('POST', '/issues/$issueId/comments', body: {'commentText': text}));
   }
 
   // 6. Time Tracking
-  Future<void> logTime(int issueId, int minutes, {String description = 'Work progress update'}) async {
-    final url = Uri.parse('$baseUrl/issues/$issueId/time-entries');
-    final response = await http.post(
-      url,
-      headers: _headers(),
-      body: jsonEncode({
-        'durationMinutes': minutes,
-        'workDescription': description,
-      }),
-    );
-
-    if (response.statusCode != 200) {
-      throw Exception('Failed to log time: ${response.body}');
-    }
+  Future<void> logTime(int issueId, int minutes, {String description = ''}) async {
+    await _send('POST', '/issues/$issueId/time-entries', body: {
+      'durationMinutes': minutes,
+      'workDescription': description,
+    });
   }
 
-  // 7. Users
-  Future<List<UserModel>> getUsers() async {
-    final url = Uri.parse('$baseUrl/users');
-    final response = await http.get(url, headers: _headers());
+  Future<List<TimeEntryModel>> getTimeEntries(int issueId) async {
+    return _list(await _send('GET', '/issues/$issueId/time-entries'), TimeEntryModel.fromJson);
+  }
 
-    if (response.statusCode == 200) {
-      final List data = jsonDecode(response.body);
-      return data.map((e) => UserModel.fromJson(e)).toList();
-    }
-    return [];
+  // 7. Users (staff directory is Team Lead and above)
+  Future<List<UserModel>> getUsers() async {
+    return _list(await _send('GET', '/users'), UserModel.fromJson);
   }
 
   Future<UserModel> updateUserRole(int userId, String newRole) async {
-    final url = Uri.parse('$baseUrl/users/$userId/role');
-    final response = await http.patch(
-      url,
-      headers: _headers(),
-      body: jsonEncode({'role': newRole}),
-    );
+    return UserModel.fromJson(await _send('PATCH', '/users/$userId/role', body: {'role': newRole}));
+  }
 
-    if (response.statusCode == 200) {
-      return UserModel.fromJson(jsonDecode(response.body));
-    } else {
-      String errorMsg = 'Failed to update role (${response.statusCode})';
-      try {
-        final body = jsonDecode(response.body);
-        if (body['message'] != null) errorMsg = body['message'];
-      } catch (_) {}
-      throw Exception(errorMsg);
-    }
+  Future<UserModel> toggleUserStatus(int userId) async {
+    return UserModel.fromJson(await _send('PATCH', '/users/$userId/status'));
   }
 
   // 8. Audit Logs
   Future<List<AuditLogModel>> getAuditLogs() async {
-    final url = Uri.parse('$baseUrl/audit-logs');
-    final response = await http.get(url, headers: _headers());
-
-    if (response.statusCode == 200) {
-      final List data = jsonDecode(response.body);
-      return data.map((e) => AuditLogModel.fromJson(e)).toList();
-    }
-    return [];
+    return _list(await _send('GET', '/audit-logs'), AuditLogModel.fromJson);
   }
 
-  // 9. Departments Management
+  // 9. Notifications
+  Future<List<NotificationModel>> getNotifications() async {
+    return _list(await _send('GET', '/notifications'), NotificationModel.fromJson);
+  }
+
+  Future<int> getUnreadNotificationCount() async {
+    final data = await _send('GET', '/notifications/unread-count');
+    return (data['count'] as num?)?.toInt() ?? 0;
+  }
+
+  Future<void> markNotificationRead(int id) async {
+    await _send('PATCH', '/notifications/$id/read');
+  }
+
+  Future<void> markAllNotificationsRead() async {
+    await _send('PATCH', '/notifications/read-all');
+  }
+
+  // 10. Departments
   Future<List<DepartmentModel>> getDepartments() async {
-    final url = Uri.parse('$baseUrl/departments');
-    final response = await http.get(url, headers: _headers());
-    if (response.statusCode == 200) {
-      final List data = jsonDecode(response.body);
-      return data.map((e) => DepartmentModel.fromJson(e)).toList();
-    }
-    return [];
+    return _list(await _send('GET', '/departments'), DepartmentModel.fromJson);
   }
 
   Future<DepartmentModel> createDepartment({
@@ -306,22 +308,13 @@ class ApiService {
     required String code,
     String? description,
   }) async {
-    final url = Uri.parse('$baseUrl/departments');
-    final response = await http.post(
-      url,
-      headers: _headers(),
-      body: jsonEncode({
-        'name': name.trim(),
-        'code': code.trim().toUpperCase(),
-        'description': description?.trim(),
-        'active': true,
-      }),
-    );
-
-    if (response.statusCode == 200) {
-      return DepartmentModel.fromJson(jsonDecode(response.body));
-    }
-    throw Exception('Failed to create department: ${response.body}');
+    final data = await _send('POST', '/departments', body: {
+      'name': name.trim(),
+      'code': code.trim().toUpperCase(),
+      'description': description?.trim(),
+      'active': true,
+    });
+    return DepartmentModel.fromJson(data);
   }
 
   Future<DepartmentModel> updateDepartment(
@@ -331,60 +324,24 @@ class ApiService {
     String? description,
     bool active = true,
   }) async {
-    final url = Uri.parse('$baseUrl/departments/$id');
-    final response = await http.put(
-      url,
-      headers: _headers(),
-      body: jsonEncode({
-        'name': name.trim(),
-        'code': code.trim().toUpperCase(),
-        'description': description?.trim(),
-        'active': active,
-      }),
-    );
-
-    if (response.statusCode == 200) {
-      return DepartmentModel.fromJson(jsonDecode(response.body));
-    }
-    throw Exception('Failed to update department: ${response.body}');
+    final data = await _send('PUT', '/departments/$id', body: {
+      'name': name.trim(),
+      'code': code.trim().toUpperCase(),
+      'description': description?.trim(),
+      'active': active,
+    });
+    return DepartmentModel.fromJson(data);
   }
 
   Future<void> deleteDepartment(int id) async {
-    final url = Uri.parse('$baseUrl/departments/$id');
-    final response = await http.delete(url, headers: _headers());
-    if (response.statusCode != 200) {
-      throw Exception('Failed to delete department: ${response.body}');
-    }
+    await _send('DELETE', '/departments/$id');
   }
 
-  Future<UserModel> getCurrentUser() async {
-    final url = Uri.parse('$baseUrl/auth/me');
-    final response = await http.get(url, headers: _headers());
-    if (response.statusCode == 200) {
-      return UserModel.fromJson(jsonDecode(response.body));
-    }
-    throw Exception('Failed to get current user: ${response.statusCode}');
-  }
-
-  Future<void> logout() async {
-    try {
-      final url = Uri.parse('$baseUrl/auth/logout');
-      await http.post(url, headers: _headers());
-    } catch (_) {}
-  }
-
-  // 10. Teams & Groups Management
+  // 11. Teams
   Future<List<TeamModel>> getTeams({int? departmentId}) async {
-    final queryParams = <String, String>{};
-    if (departmentId != null) queryParams['departmentId'] = departmentId.toString();
-
-    final url = Uri.parse('$baseUrl/teams').replace(queryParameters: queryParams.isNotEmpty ? queryParams : null);
-    final response = await http.get(url, headers: _headers());
-    if (response.statusCode == 200) {
-      final List data = jsonDecode(response.body);
-      return data.map((e) => TeamModel.fromJson(e)).toList();
-    }
-    return [];
+    final query = <String, String>{};
+    if (departmentId != null) query['departmentId'] = departmentId.toString();
+    return _list(await _send('GET', '/teams', query: query), TeamModel.fromJson);
   }
 
   Future<TeamModel> createTeam({
@@ -394,24 +351,15 @@ class ApiService {
     int? managerId,
     int? teamLeadId,
   }) async {
-    final url = Uri.parse('$baseUrl/teams');
-    final response = await http.post(
-      url,
-      headers: _headers(),
-      body: jsonEncode({
-        'name': name.trim(),
-        'departmentId': departmentId,
-        'managerId': managerId,
-        'teamLeadId': teamLeadId,
-        'description': description?.trim(),
-        'active': true,
-      }),
-    );
-
-    if (response.statusCode == 200) {
-      return TeamModel.fromJson(jsonDecode(response.body));
-    }
-    throw Exception('Failed to create team: ${response.body}');
+    final data = await _send('POST', '/teams', body: {
+      'name': name.trim(),
+      'departmentId': departmentId,
+      'managerId': managerId,
+      'teamLeadId': teamLeadId,
+      'description': description?.trim(),
+      'active': true,
+    });
+    return TeamModel.fromJson(data);
   }
 
   Future<TeamModel> updateTeam(
@@ -423,51 +371,26 @@ class ApiService {
     int? teamLeadId,
     bool active = true,
   }) async {
-    final url = Uri.parse('$baseUrl/teams/$id');
-    final response = await http.put(
-      url,
-      headers: _headers(),
-      body: jsonEncode({
-        'name': name.trim(),
-        'departmentId': departmentId,
-        'managerId': managerId,
-        'teamLeadId': teamLeadId,
-        'description': description?.trim(),
-        'active': active,
-      }),
-    );
-
-    if (response.statusCode == 200) {
-      return TeamModel.fromJson(jsonDecode(response.body));
-    }
-    throw Exception('Failed to update team: ${response.body}');
+    final data = await _send('PUT', '/teams/$id', body: {
+      'name': name.trim(),
+      'departmentId': departmentId,
+      'managerId': managerId,
+      'teamLeadId': teamLeadId,
+      'description': description?.trim(),
+      'active': active,
+    });
+    return TeamModel.fromJson(data);
   }
 
   Future<void> deleteTeam(int id) async {
-    final url = Uri.parse('$baseUrl/teams/$id');
-    final response = await http.delete(url, headers: _headers());
-    if (response.statusCode != 200) {
-      throw Exception('Failed to delete team: ${response.body}');
-    }
+    await _send('DELETE', '/teams/$id');
   }
 
   Future<void> addTeamMember(int teamId, int userId) async {
-    final url = Uri.parse('$baseUrl/teams/$teamId/members');
-    final response = await http.post(
-      url,
-      headers: _headers(),
-      body: jsonEncode({'userId': userId}),
-    );
-    if (response.statusCode != 200) {
-      throw Exception('Failed to add team member: ${response.body}');
-    }
+    await _send('POST', '/teams/$teamId/members', body: {'userId': userId});
   }
 
   Future<void> removeTeamMember(int teamId, int userId) async {
-    final url = Uri.parse('$baseUrl/teams/$teamId/members/$userId');
-    final response = await http.delete(url, headers: _headers());
-    if (response.statusCode != 200) {
-      throw Exception('Failed to remove team member: ${response.body}');
-    }
+    await _send('DELETE', '/teams/$teamId/members/$userId');
   }
 }
