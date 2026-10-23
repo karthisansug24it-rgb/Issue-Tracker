@@ -196,37 +196,71 @@ class _LoginScreenState extends State<LoginScreen> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               // Brand Header
-                              Center(
-                                child: Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF1E40AF),
-                                    borderRadius: BorderRadius.circular(10),
+                              if (!_isRegisterMode) ...[
+                                Center(
+                                  child: Image.asset(
+                                    'assets/images/logo_icon.png',
+                                    height: 56,
+                                    width: 56,
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (context, error, stackTrace) => Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF1E40AF),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: const Icon(Icons.track_changes, color: Colors.white, size: 32),
+                                    ),
                                   ),
-                                  child: Icon(
-                                    _isRegisterMode ? Icons.person_add_alt_1 : Icons.track_changes,
-                                    color: Colors.white,
-                                    size: 32,
+                                ),
+                                const SizedBox(height: 12),
+                                const Center(
+                                  child: Text(
+                                    'Dtrack',
+                                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
                                   ),
                                 ),
-                              ),
-                              const SizedBox(height: 16),
-                              Center(
-                                child: Text(
-                                  _isRegisterMode ? 'Account Creation' : 'DevTrack',
-                                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                                const SizedBox(height: 8),
+                                Center(
+                                  child: Text(
+                                    'Sign in to access projects, tasks, issues, and teams',
+                                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                                    textAlign: TextAlign.center,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 6),
-                              Center(
-                                child: Text(
-                                  _isRegisterMode
-                                      ? 'Register new user account (starts with Employee role)'
-                                      : 'Sign in to access projects, tasks, issues, and teams',
-                                  style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-                                  textAlign: TextAlign.center,
+                              ] else ...[
+                                Center(
+                                  child: Image.asset(
+                                    'assets/images/logo_icon.png',
+                                    height: 64,
+                                    width: 64,
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (context, error, stackTrace) => Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF1E40AF),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: const Icon(Icons.person_add_alt_1, color: Colors.white, size: 32),
+                                    ),
+                                  ),
                                 ),
-                              ),
+                                const SizedBox(height: 12),
+                                const Center(
+                                  child: Text(
+                                    'Account Creation',
+                                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Center(
+                                  child: Text(
+                                    'Register new user account (starts with Employee role)',
+                                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              ],
                               const SizedBox(height: 24),
 
                               // Success Message Banner

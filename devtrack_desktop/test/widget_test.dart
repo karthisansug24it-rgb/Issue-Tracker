@@ -9,7 +9,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
 
     await tester.pumpWidget(const DevTrackApp());
-    expect(find.text('DevTrack'), findsOneWidget);
+    expect(find.text('Dtrack'), findsOneWidget);
     expect(find.text('Sign In'), findsOneWidget);
   });
 }

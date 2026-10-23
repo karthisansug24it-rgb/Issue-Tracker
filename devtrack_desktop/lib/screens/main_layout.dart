@@ -44,7 +44,7 @@ class _MainLayoutState extends State<MainLayout> {
   Widget build(BuildContext context) {
     final user = AuthState.instance.currentUser!;
 
-    // Build navigation tabs based on user's exact role
+    // Build navigation tabs - allow all roles to access Dashboard, Projects, Issues, Teams, Users
     final destinations = <NavigationRailDestination>[
       const NavigationRailDestination(
         icon: Icon(Icons.dashboard_outlined),
@@ -61,35 +61,25 @@ class _MainLayoutState extends State<MainLayout> {
         selectedIcon: Icon(Icons.bug_report),
         label: Text('Issues'),
       ),
+      const NavigationRailDestination(
+        icon: Icon(Icons.groups_outlined),
+        selectedIcon: Icon(Icons.groups),
+        label: Text('Teams'),
+      ),
+      const NavigationRailDestination(
+        icon: Icon(Icons.people_outline),
+        selectedIcon: Icon(Icons.people),
+        label: Text('Users'),
+      ),
     ];
 
     final screens = <Widget>[
       DashboardScreen(onNavigateToTab: _onNavigateToTab),
       ProjectsScreen(onNavigateToTab: _onNavigateToTab),
       const IssuesScreen(),
+      const TeamsScreen(),
+      const UsersScreen(),
     ];
-
-    if (AuthState.instance.isTeamLead || AuthState.instance.isManager || AuthState.instance.isAdmin) {
-      destinations.add(
-        const NavigationRailDestination(
-          icon: Icon(Icons.groups_outlined),
-          selectedIcon: Icon(Icons.groups),
-          label: Text('Teams'),
-        ),
-      );
-      screens.add(const TeamsScreen());
-    }
-
-    if (AuthState.instance.isManager || AuthState.instance.isAdmin) {
-      destinations.add(
-        const NavigationRailDestination(
-          icon: Icon(Icons.people_outline),
-          selectedIcon: Icon(Icons.people),
-          label: Text('Users'),
-        ),
-      );
-      screens.add(const UsersScreen());
-    }
 
     if (AuthState.instance.isAdmin) {
       destinations.add(
@@ -118,17 +108,26 @@ class _MainLayoutState extends State<MainLayout> {
             title: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1E40AF),
-                    borderRadius: BorderRadius.circular(6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: Image.asset(
+                    'assets/images/logo_icon.png',
+                    height: 28,
+                    width: 28,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E40AF),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Icon(Icons.track_changes, color: Colors.white, size: 18),
+                    ),
                   ),
-                  child: const Icon(Icons.track_changes, color: Colors.white, size: 20),
                 ),
                 const SizedBox(width: 8),
                 const Text(
-                  'DevTrack',
+                  'Dtrack',
                   style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 18),
                 ),
               ],

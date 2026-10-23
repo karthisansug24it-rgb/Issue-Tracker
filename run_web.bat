@@ -1,7 +1,7 @@
 @echo off
-title DevTrack Web (Port 3000)
+title Dtrack Web (Port 3000)
 echo ========================================================
-echo Starting DevTrack Web Frontend on Fixed Port 3000...
+echo Starting Dtrack Web Frontend on Fixed Port 3000...
 echo Preserves session credentials and localStorage across restarts!
 echo ========================================================
 cd /d "%~dp0devtrack_desktop"

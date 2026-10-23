@@ -176,11 +176,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 runSpacing: 12,
                 children: [
                   _buildStatCard('Active Projects', '${_metrics!.totalProjects}', Icons.folder_outlined, Colors.indigo, () => widget.onNavigateToTab(1), width: statCardWidth),
-                  _buildStatCard('Total Teams', '${_metrics!.totalTeams}', Icons.groups_outlined, Colors.teal, () {
-                    if (AuthState.instance.isTeamLead || AuthState.instance.isManager || AuthState.instance.isAdmin) {
-                      widget.onNavigateToTab(3);
-                    }
-                  }, width: statCardWidth),
+                  _buildStatCard('Total Teams', '${_metrics!.totalTeams}', Icons.groups_outlined, Colors.teal, () => widget.onNavigateToTab(3), width: statCardWidth),
                   _buildStatCard('Total Issues', '${_metrics!.totalIssues}', Icons.assignment_outlined, Colors.blueGrey, () => widget.onNavigateToTab(2), width: statCardWidth),
                   _buildStatCard('Open / Not Started', '${_metrics!.openIssues}', Icons.hourglass_empty, Colors.orange, () => widget.onNavigateToTab(2), width: statCardWidth),
                   _buildStatCard('In Progress', '${_metrics!.inProgressIssues}', Icons.trending_up, Colors.blue, () => widget.onNavigateToTab(2), width: statCardWidth),
@@ -346,12 +342,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ],
             ),
-            if (canManageTeams)
-              TextButton.icon(
-                onPressed: () => widget.onNavigateToTab(3),
-                icon: const Icon(Icons.arrow_forward, size: 16),
-                label: const Text('Manage Teams & Members'),
-              ),
+            TextButton.icon(
+              onPressed: () => widget.onNavigateToTab(3),
+              icon: const Icon(Icons.arrow_forward, size: 16),
+              label: Text(canManageTeams ? 'Manage Teams & Members' : 'View Teams & Members'),
+            ),
           ],
         ),
         const SizedBox(height: 12),

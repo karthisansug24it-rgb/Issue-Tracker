@@ -44,7 +44,7 @@ class _DevTrackAppState extends State<DevTrackApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'DevTrack - Issue & Project Tracking Desktop',
+      title: 'Dtrack - Issue & Project Tracking',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,

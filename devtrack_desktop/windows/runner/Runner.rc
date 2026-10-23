@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.devtrack" "\0"
-            VALUE "FileDescription", "devtrack_desktop" "\0"
+            VALUE "FileDescription", "Dtrack" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "devtrack_desktop" "\0"
+            VALUE "InternalName", "Dtrack" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.devtrack. All rights reserved." "\0"
-            VALUE "OriginalFilename", "devtrack_desktop.exe" "\0"
-            VALUE "ProductName", "devtrack_desktop" "\0"
+            VALUE "OriginalFilename", "Dtrack.exe" "\0"
+            VALUE "ProductName", "Dtrack" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
