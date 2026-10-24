@@ -55,4 +55,12 @@ public class UserController {
                                                 @AuthenticationPrincipal User actor) {
         return ResponseEntity.ok(userService.toggleUserStatus(id, actor));
     }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
+    public ResponseEntity<Void> deleteUser(@PathVariable Long id,
+                                           @AuthenticationPrincipal User actor) {
+        userService.deleteUser(id, actor);
+        return ResponseEntity.ok().build();
+    }
 }

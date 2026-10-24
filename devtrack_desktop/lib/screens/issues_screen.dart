@@ -359,7 +359,17 @@ class _IssuesScreenState extends State<IssuesScreen> {
                     style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
                   ),
             trailing: isMobile
-                ? const Icon(Icons.chevron_right, color: Colors.grey)
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                        tooltip: 'Permanently delete issue',
+                        onPressed: () => _confirmDeleteIssue(issue),
+                      ),
+                      const Icon(Icons.chevron_right, color: Colors.grey),
+                    ],
+                  )
                 : Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -367,6 +377,11 @@ class _IssuesScreenState extends State<IssuesScreen> {
                       const SizedBox(width: 12),
                       _buildStatusBadge(issue.status),
                       const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                        tooltip: 'Permanently delete issue',
+                        onPressed: () => _confirmDeleteIssue(issue),
+                      ),
                       const Icon(Icons.chevron_right, color: Colors.grey),
                     ],
                   ),
@@ -414,6 +429,59 @@ class _IssuesScreenState extends State<IssuesScreen> {
       decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(4)),
       child: Text(status.replaceAll('_', ' '), style: TextStyle(color: fg, fontSize: 11, fontWeight: FontWeight.bold)),
     );
+  }
+
+  Future<void> _confirmDeleteIssue(IssueModel issue, {VoidCallback? onCloseDialog}) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Delete Issue Permanently?'),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to permanently delete issue "${issue.issueKey}: ${issue.title}"?\n\n'
+          'This will permanently delete this issue and all its comments, activity history, and logged time entries from the database. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade700,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete Permanently'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await ApiService.instance.deleteIssue(issue.id);
+        if (onCloseDialog != null) onCloseDialog();
+        setState(() {
+          _issues.removeWhere((i) => i.id == issue.id);
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: Colors.green.shade800,
+              content: Text('Issue ${issue.issueKey} deleted permanently'),
+            ),
+          );
+        }
+      } catch (e) {
+        _showError(e);
+      }
+    }
   }
 
   // ------------------------------------------------------------ create issue
@@ -778,6 +846,13 @@ class _IssuesScreenState extends State<IssuesScreen> {
                     ),
                   ),
                   if (busy) const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                    tooltip: 'Delete Issue Permanently',
+                    onPressed: busy
+                        ? null
+                        : () => _confirmDeleteIssue(issue, onCloseDialog: () => Navigator.pop(dialogContext)),
+                  ),
                   IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(dialogContext)),
                 ],
               ),
@@ -925,14 +1000,62 @@ class _IssuesScreenState extends State<IssuesScreen> {
                         ),
                       if (timeEntries.isNotEmpty) ...[
                         const SizedBox(height: 10),
-                        ...timeEntries.take(5).map((t) => Padding(
-                              padding: const EdgeInsets.only(bottom: 4),
-                              child: Text(
-                                '${t.loggedAt} · ${t.userName} · ${_formatMinutes(t.durationMinutes)}'
-                                '${t.workDescription.isNotEmpty ? ' · ${t.workDescription}' : ''}',
-                                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                              ),
-                            )),
+                        ...timeEntries.take(10).map((t) {
+                          final canDeleteTime = AuthState.instance.isAdmin ||
+                              issue.canManage ||
+                              t.userId == AuthState.instance.currentUser?.id;
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    '${t.loggedAt} · ${t.userName} · ${_formatMinutes(t.durationMinutes)}'
+                                    '${t.workDescription.isNotEmpty ? ' · ${t.workDescription}' : ''}',
+                                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                                  ),
+                                ),
+                                if (canDeleteTime)
+                                  InkWell(
+                                    borderRadius: BorderRadius.circular(4),
+                                    onTap: busy
+                                        ? null
+                                        : () async {
+                                            final confirm = await showDialog<bool>(
+                                              context: dialogContext,
+                                              builder: (c) => AlertDialog(
+                                                title: const Text('Delete Time Entry?'),
+                                                content: Text('Are you sure you want to permanently delete this logged time entry (${_formatMinutes(t.durationMinutes)})?'),
+                                                actions: [
+                                                  TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+                                                  ElevatedButton(
+                                                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700, foregroundColor: Colors.white),
+                                                    onPressed: () => Navigator.pop(c, true),
+                                                    child: const Text('Delete Permanently'),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                            if (confirm == true) {
+                                              run(() async {
+                                                await ApiService.instance.deleteTimeEntry(issue.id, t.id);
+                                                setDetailsState(() {
+                                                  issue.actualMinutes = (issue.actualMinutes - t.durationMinutes).clamp(0, 999999);
+                                                  timeEntries.removeWhere((item) => item.id == t.id);
+                                                });
+                                                await refreshActivity();
+                                              });
+                                            }
+                                          },
+                                    child: const Padding(
+                                      padding: EdgeInsets.all(2.0),
+                                      child: Icon(Icons.delete_outline, size: 14, color: Colors.redAccent),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          );
+                        }),
                       ],
                       const SizedBox(height: 20),
 
@@ -958,7 +1081,47 @@ class _IssuesScreenState extends State<IssuesScreen> {
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
                                       Text(c.authorName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                      Text(c.createdAt, style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(c.createdAt, style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
+                                          if (AuthState.instance.isAdmin || issue.canManage || c.authorId == AuthState.instance.currentUser?.id) ...[
+                                            const SizedBox(width: 4),
+                                            InkWell(
+                                              borderRadius: BorderRadius.circular(4),
+                                              onTap: busy
+                                                  ? null
+                                                  : () async {
+                                                      final confirm = await showDialog<bool>(
+                                                        context: dialogContext,
+                                                        builder: (c) => AlertDialog(
+                                                          title: const Text('Delete Comment?'),
+                                                          content: const Text('Are you sure you want to permanently delete this comment from the database?'),
+                                                          actions: [
+                                                            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+                                                            ElevatedButton(
+                                                              style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700, foregroundColor: Colors.white),
+                                                              onPressed: () => Navigator.pop(c, true),
+                                                              child: const Text('Delete Permanently'),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      );
+                                                      if (confirm == true) {
+                                                        run(() async {
+                                                          await ApiService.instance.deleteComment(issue.id, c.id);
+                                                          setDetailsState(() => comments.removeWhere((item) => item.id == c.id));
+                                                        });
+                                                      }
+                                                    },
+                                              child: const Padding(
+                                                padding: EdgeInsets.all(2.0),
+                                                child: Icon(Icons.delete_outline, size: 14, color: Colors.redAccent),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
                                     ],
                                   ),
                                   const SizedBox(height: 4),

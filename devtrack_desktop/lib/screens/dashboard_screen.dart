@@ -59,6 +59,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  Future<void> _confirmDeleteIssue(IssueModel issue) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Delete Issue Permanently?'),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to permanently delete issue "${issue.issueKey}: ${issue.title}" from the database?\n\n'
+          'This will permanently delete this issue and all its comments, history, and time logs. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete Permanently'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await ApiService.instance.deleteIssue(issue.id);
+        setState(() => _recentIssues.removeWhere((i) => i.id == issue.id));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(backgroundColor: Colors.green.shade800, content: Text('Issue ${issue.issueKey} deleted permanently')),
+          );
+        }
+        _loadData();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(backgroundColor: Colors.red.shade800, content: Text('Error deleting issue: $e')),
+          );
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = AuthState.instance.currentUser;
@@ -286,16 +332,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ],
                         ],
                       ),
-                      trailing: isNarrow
-                          ? null
-                          : Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                _buildPriorityChip(issue.priority),
-                                const SizedBox(width: 8),
-                                _buildStatusChip(issue.status),
-                              ],
-                            ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (!isNarrow) ...[
+                            _buildPriorityChip(issue.priority),
+                            const SizedBox(width: 8),
+                            _buildStatusChip(issue.status),
+                            const SizedBox(width: 6),
+                          ],
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                            tooltip: 'Permanently delete issue',
+                            onPressed: () => _confirmDeleteIssue(issue),
+                          ),
+                        ],
+                      ),
                       onTap: () => widget.onNavigateToTab(2),
                     );
                   },

@@ -10,4 +10,6 @@ import java.util.List;
 public interface TimeEntryRepository extends JpaRepository<TimeEntry, Long> {
     List<TimeEntry> findByIssueIdOrderByLoggedAtDesc(Long issueId);
     List<TimeEntry> findByUserId(Long userId);
+    void deleteByIssueId(Long issueId);
+    void deleteByUserId(Long userId);
 }

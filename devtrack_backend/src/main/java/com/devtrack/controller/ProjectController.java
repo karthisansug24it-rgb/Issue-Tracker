@@ -62,4 +62,11 @@ public class ProjectController {
         projectService.removeMember(id, userId, user);
         return ResponseEntity.ok().build();
     }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER')")
+    public ResponseEntity<Void> deleteProject(@PathVariable Long id, @AuthenticationPrincipal User user) {
+        projectService.deleteProject(id, user);
+        return ResponseEntity.ok().build();
+    }
 }

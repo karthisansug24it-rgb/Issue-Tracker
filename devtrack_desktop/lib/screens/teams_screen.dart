@@ -894,22 +894,39 @@ class _TeamsScreenState extends State<TeamsScreen> {
                                   ),
                                   subtitle: Text('${member.email} · ${member.jobTitle}', style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
                                   trailing: !canRemove ? null : IconButton(
-                                    icon: const Icon(Icons.remove_circle_outline, color: Colors.red, size: 20),
-                                    tooltip: 'Remove from group',
+                                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                                    tooltip: 'Permanently remove member from group',
                                     onPressed: () async {
-                                      Navigator.pop(dialogCtx);
-                                      try {
-                                        await ApiService.instance.removeTeamMember(team.id, member.id);
-                                        if (!mounted) return;
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(content: Text('Removed ${member.fullName} from group')),
-                                        );
-                                        _loadData();
-                                      } catch (e) {
-                                        if (!mounted) return;
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(backgroundColor: Colors.red.shade800, content: Text('Error removing member: $e')),
-                                        );
+                                      final confirm = await showDialog<bool>(
+                                        context: dialogCtx,
+                                        builder: (c) => AlertDialog(
+                                          title: const Text('Remove Member from Group?'),
+                                          content: Text('Are you sure you want to permanently remove "${member.fullName}" from "${team.name}"?'),
+                                          actions: [
+                                            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+                                            ElevatedButton(
+                                              style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700, foregroundColor: Colors.white),
+                                              onPressed: () => Navigator.pop(c, true),
+                                              child: const Text('Remove Member'),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                      if (confirm == true) {
+                                        Navigator.pop(dialogCtx);
+                                        try {
+                                          await ApiService.instance.removeTeamMember(team.id, member.id);
+                                          if (!mounted) return;
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text('Removed ${member.fullName} from group')),
+                                          );
+                                          _loadData();
+                                        } catch (e) {
+                                          if (!mounted) return;
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(backgroundColor: Colors.red.shade800, content: Text('Error removing member: $e')),
+                                          );
+                                        }
                                       }
                                     },
                                   ),
@@ -1078,33 +1095,30 @@ class _TeamsScreenState extends State<TeamsScreen> {
   // 5. Delete Department Dialog
   Future<void> _deleteDepartment(DepartmentModel dept) async {
     final teamsInDept = _teams.where((t) => t.departmentId == dept.id).toList();
-    if (teamsInDept.isNotEmpty) {
-      showDialog(
-        context: context,
-        builder: (c) => AlertDialog(
-          title: const Text('Cannot Delete Department'),
-          content: Text(
-            'The department "${dept.name}" contains ${teamsInDept.length} team(s). Please reassign or delete these teams before deleting this department.',
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(c), child: const Text('OK')),
-          ],
-        ),
-      );
-      return;
-    }
+    final extraMessage = teamsInDept.isNotEmpty
+        ? '\n\nNote: This department contains ${teamsInDept.length} group(s). Deleting will safely detach its groups and members.'
+        : '';
 
     final confirm = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('Delete Department'),
-        content: Text('Are you sure you want to delete the department "${dept.name}" (${dept.code})? This action cannot be undone.'),
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Delete Department Permanently?'),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to permanently delete department "${dept.name}" (${dept.code}) from the database?$extraMessage\n\n'
+          'This action cannot be undone.',
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(c, true),
-            child: const Text('Delete'),
+            child: const Text('Delete Permanently'),
           ),
         ],
       ),
@@ -1112,10 +1126,10 @@ class _TeamsScreenState extends State<TeamsScreen> {
 
     if (confirm == true) {
       try {
-        await ApiService.instance.deleteDepartment(dept.id);
+        await ApiService.instance.deleteDepartment(dept.id, cascade: true);
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(backgroundColor: Colors.green.shade800, content: Text('Department "${dept.name}" deleted.')),
+          SnackBar(backgroundColor: Colors.green.shade800, content: Text('Department "${dept.name}" deleted permanently.')),
         );
         if (_selectedDepartmentId == dept.id) {
           _selectedDepartmentId = null;
@@ -1135,14 +1149,23 @@ class _TeamsScreenState extends State<TeamsScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('Delete Team / Group'),
-        content: Text('Are you sure you want to delete "${team.name}"? This will remove all member assignments.'),
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Delete Group Permanently?'),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to permanently delete group "${team.name}"?\n\n'
+          'This will remove all member assignments and permanently delete this group from the database. This action cannot be undone.',
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(c, true),
-            child: const Text('Delete'),
+            child: const Text('Delete Permanently'),
           ),
         ],
       ),
@@ -1153,13 +1176,13 @@ class _TeamsScreenState extends State<TeamsScreen> {
         await ApiService.instance.deleteTeam(team.id);
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(backgroundColor: Colors.green.shade800, content: Text('Team "${team.name}" deleted successfully.')),
+          SnackBar(backgroundColor: Colors.green.shade800, content: Text('Group "${team.name}" deleted permanently.')),
         );
         _loadData();
       } catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(backgroundColor: Colors.red.shade800, content: Text('Error: $e')),
+          SnackBar(backgroundColor: Colors.red.shade800, content: Text('Error deleting group: $e')),
         );
       }
     }
@@ -1797,7 +1820,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
                                         tooltip: 'Edit Group',
                                         onPressed: () => _showTeamDialog(team: team),
                                       ),
-                                    if (isAdminOrSuper)
+                                    if (isAdminOrSuper || _canManageTeam(team))
                                       IconButton(
                                         icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
                                         tooltip: 'Delete Group',
@@ -1824,7 +1847,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
                                         tooltip: 'Edit Group & Details',
                                         onPressed: () => _showTeamDialog(team: team),
                                       ),
-                                    if (isAdminOrSuper)
+                                    if (isAdminOrSuper || _canManageTeam(team))
                                       IconButton(
                                         icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
                                         tooltip: 'Delete Group',

@@ -9,4 +9,6 @@ import java.util.List;
 @Repository
 public interface IssueCommentRepository extends JpaRepository<IssueComment, Long> {
     List<IssueComment> findByIssueIdOrderByCreatedAtAsc(Long issueId);
+    void deleteByIssueId(Long issueId);
+    void deleteByAuthorId(Long authorId);
 }

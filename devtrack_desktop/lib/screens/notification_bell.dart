@@ -69,6 +69,34 @@ class _NotificationBellState extends State<NotificationBell> {
                       },
                       child: const Text('Mark all read'),
                     ),
+                  if (items.isNotEmpty)
+                    IconButton(
+                      icon: const Icon(Icons.delete_sweep_outlined, color: Colors.redAccent, size: 20),
+                      tooltip: 'Clear all notifications',
+                      onPressed: () async {
+                        final confirm = await showDialog<bool>(
+                          context: dialogCtx,
+                          builder: (c) => AlertDialog(
+                            title: const Text('Delete All Notifications?'),
+                            content: const Text('Are you sure you want to permanently delete all your notifications from the database?'),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700, foregroundColor: Colors.white),
+                                onPressed: () => Navigator.pop(c, true),
+                                child: const Text('Delete All'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirm == true) {
+                          try {
+                            await ApiService.instance.clearNotifications();
+                            setDialogState(() => items.clear());
+                          } catch (_) {}
+                        }
+                      },
+                    ),
                 ],
               ),
               content: SizedBox(
@@ -95,6 +123,16 @@ class _NotificationBellState extends State<NotificationBell> {
                             ),
                             subtitle: Text('${n.message}\n${n.createdAt}', style: const TextStyle(fontSize: 11)),
                             isThreeLine: true,
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
+                              tooltip: 'Delete notification',
+                              onPressed: () async {
+                                try {
+                                  await ApiService.instance.deleteNotification(n.id);
+                                  setDialogState(() => items.removeWhere((item) => item.id == n.id));
+                                } catch (_) {}
+                              },
+                            ),
                             onTap: n.read
                                 ? null
                                 : () async {

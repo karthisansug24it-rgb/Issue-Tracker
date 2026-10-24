@@ -37,6 +37,95 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
     }
   }
 
+  Future<void> _confirmDeleteLog(AuditLogModel log) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Delete Audit Log?'),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to permanently delete this audit log record (${log.action}: ${log.details}) from the database? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete Permanently'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await ApiService.instance.deleteAuditLog(log.id);
+        setState(() => _logs.removeWhere((l) => l.id == log.id));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(backgroundColor: Colors.green, content: Text('Audit log record deleted permanently.')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(backgroundColor: Colors.red.shade800, content: Text('Error deleting audit log: $e')),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _confirmClearAllLogs() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Purge All Audit Logs?'),
+          ],
+        ),
+        content: const Text(
+          'Are you sure you want to permanently delete ALL security & audit logs from the database?\n\n'
+          'All historical audit records will be permanently erased. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Purge All Logs'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await ApiService.instance.clearAuditLogs();
+        setState(() => _logs.clear());
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(backgroundColor: Colors.green, content: Text('All audit logs purged permanently from database.')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(backgroundColor: Colors.red.shade800, content: Text('Error purging audit logs: $e')),
+          );
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -51,11 +140,31 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Security & Audit Logs', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 4),
-                Text(
-                  'Historical audit trail of administrative activities and system changes',
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Security & Audit Logs', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Historical audit trail of administrative activities and system changes',
+                          style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                    if (_logs.isNotEmpty)
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.delete_sweep, size: 16, color: Colors.redAccent),
+                        label: const Text('Clear All Logs', style: TextStyle(color: Colors.redAccent, fontSize: 12)),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Colors.redAccent),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        onPressed: _confirmClearAllLogs,
+                      ),
+                  ],
                 ),
                 const SizedBox(height: 16),
 
@@ -112,9 +221,19 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
                                         ],
                                       ),
                                     ),
-                                    trailing: isCompact
-                                        ? null
-                                        : Text(log.timestamp, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (!isCompact)
+                                          Text(log.timestamp, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                                        const SizedBox(width: 8),
+                                        IconButton(
+                                          icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
+                                          tooltip: 'Delete record permanently',
+                                          onPressed: () => _confirmDeleteLog(log),
+                                        ),
+                                      ],
+                                    ),
                                   );
                                 },
                               ),

@@ -368,6 +368,65 @@ class _UsersScreenState extends State<UsersScreen> {
     }
   }
 
+  Future<void> _confirmDeleteUser(UserModel user) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Delete User Permanently?'),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to permanently delete "${user.fullName}" (${user.email})?\n\n'
+          'This will permanently delete the user account from the database and remove their team and project assignments. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade700,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete Permanently'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await ApiService.instance.deleteUser(user.id);
+        setState(() {
+          _users.removeWhere((u) => u.id == user.id);
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: Colors.green.shade800,
+              content: Text('${user.fullName} deleted permanently'),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: Colors.red.shade800,
+              content: Text('Failed to delete user: $e'),
+            ),
+          );
+        }
+      }
+    }
+  }
+
   List<UserModel> get _filteredUsers {
     return _users.where((u) {
       if (_roleFilter != 'ALL' && u.role != _roleFilter) return false;
@@ -646,6 +705,18 @@ class _UsersScreenState extends State<UsersScreen> {
                                             ),
                                           ),
                                         ),
+                                        if (canModify) ...[
+                                          const SizedBox(width: 6),
+                                          IconButton(
+                                            style: IconButton.styleFrom(
+                                              visualDensity: VisualDensity.compact,
+                                              padding: EdgeInsets.zero,
+                                            ),
+                                            icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                                            tooltip: 'Permanently delete user',
+                                            onPressed: () => _confirmDeleteUser(u),
+                                          ),
+                                        ],
                                       ],
                                     ),
                                   );

@@ -400,4 +400,72 @@ public class IssueService {
         }
         return dto;
     }
+
+    @Transactional
+    public void deleteIssue(Long id, User actor) {
+        Issue issue = issueRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Issue not found: " + id));
+        Project project = accessService.requireProject(issue.getProjectId());
+        ProjectAccess access = accessService.projectAccess(actor, project);
+
+        boolean canDelete = accessService.isAdmin(actor) || access.canManage() || accessService.isReporter(actor, issue)
+                || (issue.getAssigneeId() != null && issue.getAssigneeId().equals(actor.getId()));
+        if (!canDelete) {
+            throw new ForbiddenException("You do not have permission to permanently delete this issue.");
+        }
+
+        List<Issue> childIssues = issueRepository.findByParentIssueId(id);
+        for (Issue child : childIssues) {
+            child.setParentIssueId(null);
+            issueRepository.save(child);
+        }
+
+        commentRepository.deleteByIssueId(id);
+        historyRepository.deleteByIssueId(id);
+        timeEntryRepository.deleteByIssueId(id);
+        notificationRepository.deleteByRelatedIssueId(id);
+
+        issueRepository.delete(issue);
+    }
+
+    @Transactional
+    public void deleteComment(Long issueId, Long commentId, User actor) {
+        IssueComment comment = commentRepository.findById(commentId)
+                .orElseThrow(() -> new NotFoundException("Comment not found: " + commentId));
+        if (!comment.getIssueId().equals(issueId)) {
+            throw new BadRequestException("Comment does not belong to issue " + issueId);
+        }
+        Issue issue = requireIssue(issueId);
+        Project project = accessService.requireProject(issue.getProjectId());
+        ProjectAccess access = accessService.projectAccess(actor, project);
+
+        boolean canDelete = accessService.isAdmin(actor) || access.canManage() || comment.getAuthorId().equals(actor.getId());
+        if (!canDelete) {
+            throw new ForbiddenException("You can only delete your own comments or comments in projects you manage.");
+        }
+        commentRepository.delete(comment);
+    }
+
+    @Transactional
+    public void deleteTimeEntry(Long issueId, Long entryId, User actor) {
+        TimeEntry entry = timeEntryRepository.findById(entryId)
+                .orElseThrow(() -> new NotFoundException("Time entry not found: " + entryId));
+        if (!entry.getIssueId().equals(issueId)) {
+            throw new BadRequestException("Time entry does not belong to issue " + issueId);
+        }
+        Issue issue = requireIssue(issueId);
+        Project project = accessService.requireProject(issue.getProjectId());
+        ProjectAccess access = accessService.projectAccess(actor, project);
+
+        boolean canDelete = accessService.isAdmin(actor) || access.canManage() || entry.getUserId().equals(actor.getId());
+        if (!canDelete) {
+            throw new ForbiddenException("You do not have permission to delete this time entry.");
+        }
+
+        int current = issue.getActualMinutes() != null ? issue.getActualMinutes() : 0;
+        issue.setActualMinutes(Math.max(0, current - entry.getDurationMinutes()));
+        issueRepository.save(issue);
+
+        timeEntryRepository.delete(entry);
+    }
 }

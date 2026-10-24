@@ -49,8 +49,11 @@ public class OrganizationController {
 
     @DeleteMapping("/departments/{id}")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
-    public ResponseEntity<Void> deleteDepartment(@PathVariable Long id, @AuthenticationPrincipal User actor) {
-        organizationService.deleteDepartment(id, actor);
+    public ResponseEntity<Void> deleteDepartment(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "false") boolean cascade,
+            @AuthenticationPrincipal User actor) {
+        organizationService.deleteDepartment(id, cascade, actor);
         return ResponseEntity.ok().build();
     }
 
@@ -80,7 +83,7 @@ public class OrganizationController {
     }
 
     @DeleteMapping("/teams/{id}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER')")
     public ResponseEntity<Void> deleteTeam(@PathVariable Long id, @AuthenticationPrincipal User actor) {
         organizationService.deleteTeam(id, actor);
         return ResponseEntity.ok().build();

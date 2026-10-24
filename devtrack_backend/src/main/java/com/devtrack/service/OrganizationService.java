@@ -130,17 +130,34 @@ public class OrganizationService {
     }
 
     @Transactional
-    public void deleteDepartment(Long id, User actor) {
+    public void deleteDepartment(Long id, boolean cascade, User actor) {
         Department dept = departmentRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Department not found: " + id));
-        if (teamRepository.existsByDepartmentId(id)) {
-            throw new ConflictException("Move or delete the teams in " + dept.getName() + " before deleting it.");
-        }
-        if (userRepository.existsByDepartmentId(id)) {
-            throw new ConflictException("Users still belong to " + dept.getName() + ". Reassign them before deleting it.");
+        if (!cascade) {
+            if (teamRepository.existsByDepartmentId(id)) {
+                throw new ConflictException("Move or delete the teams in " + dept.getName() + " before deleting it.");
+            }
+            if (userRepository.existsByDepartmentId(id)) {
+                throw new ConflictException("Users still belong to " + dept.getName() + ". Reassign them before deleting it.");
+            }
+        } else {
+            teamRepository.findByDepartmentId(id).forEach(t -> {
+                t.setDepartmentId(null);
+                teamRepository.save(t);
+            });
+            userRepository.findByDepartmentId(id).forEach(u -> {
+                u.setDepartmentId(null);
+                u.setDepartment(null);
+                userRepository.save(u);
+            });
         }
         departmentRepository.delete(dept);
         audit(actor, "DEPARTMENT_DELETED", "DEPARTMENT", id, "Deleted department " + dept.getName());
+    }
+
+    @Transactional
+    public void deleteDepartment(Long id, User actor) {
+        deleteDepartment(id, false, actor);
     }
 
     // ------------------------------------------------------------------ teams
@@ -214,8 +231,7 @@ public class OrganizationService {
 
     @Transactional
     public void deleteTeam(Long id, User actor) {
-        Team team = teamRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Team not found: " + id));
+        Team team = requireManageableTeam(id, actor);
         teamMemberRepository.deleteByTeamId(id);
         teamRepository.delete(team);
         audit(actor, "TEAM_DELETED", "TEAM", id, "Deleted team " + team.getName());

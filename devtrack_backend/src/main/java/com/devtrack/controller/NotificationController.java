@@ -51,4 +51,20 @@ public class NotificationController {
         notificationRepository.saveAll(unread);
         return ResponseEntity.ok().build();
     }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteNotification(@PathVariable Long id, @AuthenticationPrincipal User user) {
+        Notification n = notificationRepository.findById(id)
+                .filter(x -> x.getRecipientId().equals(user.getId()))
+                .orElseThrow(() -> new NotFoundException("Notification not found: " + id));
+        notificationRepository.delete(n);
+        return ResponseEntity.ok().build();
+    }
+
+    @DeleteMapping
+    @Transactional
+    public ResponseEntity<Void> clearAllNotifications(@AuthenticationPrincipal User user) {
+        notificationRepository.deleteByRecipientId(user.getId());
+        return ResponseEntity.ok().build();
+    }
 }

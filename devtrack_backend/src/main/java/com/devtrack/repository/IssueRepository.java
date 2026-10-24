@@ -23,6 +23,8 @@ public interface IssueRepository extends JpaRepository<Issue, Long>, JpaSpecific
     List<Issue> findByStatus(IssueStatus status);
     List<Issue> findByProjectIdAndAssigneeId(Long projectId, Long assigneeId);
     List<Issue> findByProjectIdAndStatus(Long projectId, IssueStatus status);
+    List<Issue> findByParentIssueId(Long parentIssueId);
+    void deleteByProjectId(Long projectId);
 
     long countByStatus(IssueStatus status);
     long countByPriority(IssuePriority priority);

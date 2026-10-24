@@ -185,6 +185,10 @@ class ApiService {
     await _send('DELETE', '/projects/$projectId/members/$userId');
   }
 
+  Future<void> deleteProject(int projectId) async {
+    await _send('DELETE', '/projects/$projectId');
+  }
+
   // 4. Issues
   Future<List<IssueModel>> getIssues({int? projectId, String? status, String? type, String? priority, String? search}) async {
     final query = <String, String>{};
@@ -241,6 +245,10 @@ class ApiService {
     return _list(await _send('GET', '/issues/$issueId/history'), IssueHistoryModel.fromJson);
   }
 
+  Future<void> deleteIssue(int issueId) async {
+    await _send('DELETE', '/issues/$issueId');
+  }
+
   // 5. Comments
   Future<List<CommentModel>> getComments(int issueId) async {
     return _list(await _send('GET', '/issues/$issueId/comments'), CommentModel.fromJson);
@@ -248,6 +256,10 @@ class ApiService {
 
   Future<CommentModel> addComment(int issueId, String text) async {
     return CommentModel.fromJson(await _send('POST', '/issues/$issueId/comments', body: {'commentText': text}));
+  }
+
+  Future<void> deleteComment(int issueId, int commentId) async {
+    await _send('DELETE', '/issues/$issueId/comments/$commentId');
   }
 
   // 6. Time Tracking
@@ -260,6 +272,10 @@ class ApiService {
 
   Future<List<TimeEntryModel>> getTimeEntries(int issueId) async {
     return _list(await _send('GET', '/issues/$issueId/time-entries'), TimeEntryModel.fromJson);
+  }
+
+  Future<void> deleteTimeEntry(int issueId, int entryId) async {
+    await _send('DELETE', '/issues/$issueId/time-entries/$entryId');
   }
 
   // 7. Users (staff directory is Team Lead and above)
@@ -275,9 +291,21 @@ class ApiService {
     return UserModel.fromJson(await _send('PATCH', '/users/$userId/status'));
   }
 
+  Future<void> deleteUser(int userId) async {
+    await _send('DELETE', '/users/$userId');
+  }
+
   // 8. Audit Logs
   Future<List<AuditLogModel>> getAuditLogs() async {
     return _list(await _send('GET', '/audit-logs'), AuditLogModel.fromJson);
+  }
+
+  Future<void> deleteAuditLog(int id) async {
+    await _send('DELETE', '/audit-logs/$id');
+  }
+
+  Future<void> clearAuditLogs() async {
+    await _send('DELETE', '/audit-logs');
   }
 
   // 9. Notifications
@@ -296,6 +324,14 @@ class ApiService {
 
   Future<void> markAllNotificationsRead() async {
     await _send('PATCH', '/notifications/read-all');
+  }
+
+  Future<void> deleteNotification(int id) async {
+    await _send('DELETE', '/notifications/$id');
+  }
+
+  Future<void> clearNotifications() async {
+    await _send('DELETE', '/notifications');
   }
 
   // 10. Departments
@@ -333,8 +369,8 @@ class ApiService {
     return DepartmentModel.fromJson(data);
   }
 
-  Future<void> deleteDepartment(int id) async {
-    await _send('DELETE', '/departments/$id');
+  Future<void> deleteDepartment(int id, {bool cascade = true}) async {
+    await _send('DELETE', '/departments/$id', query: {'cascade': cascade.toString()});
   }
 
   // 11. Teams

@@ -85,4 +85,26 @@ public class IssueController {
                                              @AuthenticationPrincipal User user) {
         return ResponseEntity.ok(issueService.logTime(id, request.getDurationMinutes(), request.getWorkDescription(), user));
     }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteIssue(@PathVariable Long id, @AuthenticationPrincipal User user) {
+        issueService.deleteIssue(id, user);
+        return ResponseEntity.ok().build();
+    }
+
+    @DeleteMapping("/{id}/comments/{commentId}")
+    public ResponseEntity<Void> deleteComment(@PathVariable Long id,
+                                              @PathVariable Long commentId,
+                                              @AuthenticationPrincipal User user) {
+        issueService.deleteComment(id, commentId, user);
+        return ResponseEntity.ok().build();
+    }
+
+    @DeleteMapping("/{id}/time-entries/{entryId}")
+    public ResponseEntity<Void> deleteTimeEntry(@PathVariable Long id,
+                                                @PathVariable Long entryId,
+                                                @AuthenticationPrincipal User user) {
+        issueService.deleteTimeEntry(id, entryId, user);
+        return ResponseEntity.ok().build();
+    }
 }

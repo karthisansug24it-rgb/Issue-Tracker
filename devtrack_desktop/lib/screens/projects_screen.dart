@@ -230,15 +230,28 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                   minHeight: 6,
                   borderRadius: BorderRadius.circular(3),
                 ),
-                const SizedBox(height: 6),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                    icon: Icon(proj.canManage ? Icons.manage_accounts : Icons.people_outline, size: 16),
-                    label: Text(proj.canManage ? 'Manage Members' : 'Members'),
-                    onPressed: () => _showMembersDialog(proj),
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    if (proj.canManage || AuthState.instance.isAdmin || AuthState.instance.hasPermission('PROJECT_CREATE'))
+                      IconButton(
+                        style: IconButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                        ),
+                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                        tooltip: 'Permanently delete project',
+                        onPressed: () => _confirmDeleteProject(proj),
+                      )
+                    else
+                      const SizedBox.shrink(),
+                    TextButton.icon(
+                      style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                      icon: Icon(proj.canManage ? Icons.manage_accounts : Icons.people_outline, size: 16),
+                      label: Text(proj.canManage ? 'Manage Members' : 'Members'),
+                      onPressed: () => _showMembersDialog(proj),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -246,6 +259,49 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         );
       },
     );
+  }
+
+  Future<void> _confirmDeleteProject(ProjectModel project) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Delete Project Permanently?'),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to permanently delete "${project.name}" (${project.projectKey})?\n\n'
+          'This will permanently delete the project and all its associated issues, comments, time logs, and member mappings from the database. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade700,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete Permanently'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await ApiService.instance.deleteProject(project.id);
+        _snack('Project ${project.projectKey} deleted permanently');
+        _loadProjects();
+      } catch (e) {
+        _snack(e.toString(), error: true);
+      }
+    }
   }
 
   // --------------------------------------------------------------- members
@@ -414,11 +470,30 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                                                 },
                                         ),
                                         IconButton(
-                                          icon: const Icon(Icons.remove_circle_outline, color: Colors.red, size: 20),
-                                          tooltip: 'Remove from project',
+                                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                                          tooltip: 'Permanently remove member from project',
                                           onPressed: busy
                                               ? null
-                                              : () => run(() => ApiService.instance.removeProjectMember(project.id, m.id)),
+                                              : () async {
+                                                  final confirm = await showDialog<bool>(
+                                                    context: dialogCtx,
+                                                    builder: (c) => AlertDialog(
+                                                      title: const Text('Remove Project Member?'),
+                                                      content: Text('Are you sure you want to permanently remove "${m.fullName}" from project ${project.projectKey}?'),
+                                                      actions: [
+                                                        TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+                                                        ElevatedButton(
+                                                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700, foregroundColor: Colors.white),
+                                                          onPressed: () => Navigator.pop(c, true),
+                                                          child: const Text('Remove Member'),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  );
+                                                  if (confirm == true) {
+                                                    run(() => ApiService.instance.removeProjectMember(project.id, m.id));
+                                                  }
+                                                },
                                         ),
                                       ],
                                     ),

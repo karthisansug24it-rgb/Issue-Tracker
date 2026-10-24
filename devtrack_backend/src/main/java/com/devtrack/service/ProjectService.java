@@ -25,6 +25,10 @@ public class ProjectService {
     private final ProjectMemberRepository projectMemberRepository;
     private final UserRepository userRepository;
     private final IssueRepository issueRepository;
+    private final IssueCommentRepository commentRepository;
+    private final IssueHistoryRepository historyRepository;
+    private final TimeEntryRepository timeEntryRepository;
+    private final NotificationRepository notificationRepository;
     private final AuditLogRepository auditLogRepository;
     private final AccessService accessService;
 
@@ -32,12 +36,20 @@ public class ProjectService {
                           ProjectMemberRepository projectMemberRepository,
                           UserRepository userRepository,
                           IssueRepository issueRepository,
+                          IssueCommentRepository commentRepository,
+                          IssueHistoryRepository historyRepository,
+                          TimeEntryRepository timeEntryRepository,
+                          NotificationRepository notificationRepository,
                           AuditLogRepository auditLogRepository,
                           AccessService accessService) {
         this.projectRepository = projectRepository;
         this.projectMemberRepository = projectMemberRepository;
         this.userRepository = userRepository;
         this.issueRepository = issueRepository;
+        this.commentRepository = commentRepository;
+        this.historyRepository = historyRepository;
+        this.timeEntryRepository = timeEntryRepository;
+        this.notificationRepository = notificationRepository;
         this.auditLogRepository = auditLogRepository;
         this.accessService = accessService;
     }
@@ -194,5 +206,34 @@ public class ProjectService {
         dto.setCanManage(access.canManage());
         dto.setCanAssign(access.canAssign());
         return dto;
+    }
+
+    @Transactional
+    public void deleteProject(Long id, User actor) {
+        Project project = accessService.requireProject(id);
+        if (!accessService.isAdmin(actor) && !(project.getOwnerId() != null && project.getOwnerId().equals(actor.getId()))) {
+            throw new ForbiddenException("Only admins or the project owner can permanently delete this project.");
+        }
+
+        List<Issue> issues = issueRepository.findByProjectId(id);
+        for (Issue issue : issues) {
+            commentRepository.deleteByIssueId(issue.getId());
+            historyRepository.deleteByIssueId(issue.getId());
+            timeEntryRepository.deleteByIssueId(issue.getId());
+            notificationRepository.deleteByRelatedIssueId(issue.getId());
+        }
+        for (Issue issue : issues) {
+            if (issue.getParentIssueId() != null) {
+                issue.setParentIssueId(null);
+                issueRepository.save(issue);
+            }
+        }
+        issueRepository.deleteAll(issues);
+
+        projectMemberRepository.deleteByProjectId(id);
+        projectRepository.delete(project);
+
+        auditLogRepository.save(new AuditLog(actor.getId(), actor.getFullName(), "PROJECT_DELETED",
+                "PROJECT", id.toString(), "Permanently deleted project: " + project.getName() + " (" + project.getProjectKey() + ")"));
     }
 }
