@@ -33,6 +33,7 @@ dependencies:
 
   http: ^1.2.2
   cupertino_icons: ^1.0.8
+  file_picker: ^13.3.0
 
 dev_dependencies:
   flutter_test:

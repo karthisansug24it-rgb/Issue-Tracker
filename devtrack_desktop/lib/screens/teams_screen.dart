@@ -913,6 +913,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
                                         ),
                                       );
                                       if (confirm == true) {
+                                        if (!dialogCtx.mounted) return;
                                         Navigator.pop(dialogCtx);
                                         try {
                                           await ApiService.instance.removeTeamMember(team.id, member.id);

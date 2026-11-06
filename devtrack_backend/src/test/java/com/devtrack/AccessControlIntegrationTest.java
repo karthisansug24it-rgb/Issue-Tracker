@@ -160,8 +160,8 @@ class AccessControlIntegrationTest {
     }
 
     @Test
-    void employeesCannotListTheStaffDirectory() throws Exception {
-        as(KARTHI, get("/api/v1/users")).andExpect(status().isForbidden());
+    void employeesCanListTheStaffDirectory() throws Exception {
+        as(KARTHI, get("/api/v1/users")).andExpect(status().isOk());
         as(SURESH, get("/api/v1/users")).andExpect(status().isOk());
         // ...but can see the members of their own project for assignment
         as(KARTHI, get("/api/v1/projects/" + projectId("WEB") + "/members")).andExpect(status().isOk());
@@ -338,7 +338,9 @@ class AccessControlIntegrationTest {
         asJson(ARUN, post("/api/v1/teams"), "{\"name\":\"X\",\"departmentId\":" + engId + ",\"teamLeadId\":" + userId(SURESH) + "}")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.managerName").value("Arun Kumar"));
-        as(KARTHI, get("/api/v1/teams")).andExpect(status().isForbidden());
+        as(KARTHI, get("/api/v1/teams")).andExpect(status().isOk());
+        asJson(KARTHI, post("/api/v1/teams"), "{\"name\":\"X\",\"departmentId\":" + engId + "}")
+                .andExpect(status().isForbidden());
     }
 
     @Test

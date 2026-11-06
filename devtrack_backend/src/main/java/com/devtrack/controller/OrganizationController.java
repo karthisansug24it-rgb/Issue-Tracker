@@ -57,9 +57,9 @@ public class OrganizationController {
         return ResponseEntity.ok().build();
     }
 
-    // Teams (member lists include emails, so Team Lead and above only)
+    // Teams (directory viewable by all authenticated users)
     @GetMapping("/teams")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'TEAM_LEAD')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE')")
     public ResponseEntity<List<TeamDto>> getTeams(@RequestParam(required = false) Long departmentId) {
         if (departmentId != null) {
             return ResponseEntity.ok(organizationService.getTeamsByDepartment(departmentId));

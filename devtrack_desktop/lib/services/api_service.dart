@@ -6,6 +6,7 @@ import '../models/project_member_model.dart';
 import '../models/issue_model.dart';
 import '../models/issue_activity_model.dart';
 import '../models/comment_model.dart';
+import '../models/attachment_model.dart';
 import '../models/audit_log_model.dart';
 import '../models/dashboard_metrics_model.dart';
 import '../models/notification_model.dart';
@@ -213,8 +214,11 @@ class ApiService {
     int? assigneeId,
     String? dueDate,
     int estimatedMinutes = 0,
+    int? parentIssueId,
+    List<Map<String, dynamic>>? attachments,
+    List<Map<String, dynamic>>? subtasks,
   }) async {
-    final data = await _send('POST', '/issues', body: {
+    final body = <String, dynamic>{
       'projectId': projectId,
       'title': title.trim(),
       'description': description.trim(),
@@ -223,7 +227,58 @@ class ApiService {
       'assigneeId': assigneeId,
       'dueDate': dueDate,
       'estimatedMinutes': estimatedMinutes,
+    };
+    if (parentIssueId != null) body['parentIssueId'] = parentIssueId;
+    if (attachments != null && attachments.isNotEmpty) body['attachments'] = attachments;
+    if (subtasks != null && subtasks.isNotEmpty) body['subtasks'] = subtasks;
+
+    final data = await _send('POST', '/issues', body: body);
+    return IssueModel.fromJson(data);
+  }
+
+  // Attachments
+  Future<List<AttachmentModel>> getIssueAttachments(int issueId) async {
+    return _list(await _send('GET', '/issues/$issueId/attachments'), AttachmentModel.fromJson);
+  }
+
+  Future<AttachmentModel> addAttachment(int issueId, {
+    required String fileName,
+    required String fileData,
+    String? fileType,
+    int? fileSize,
+  }) async {
+    final data = await _send('POST', '/issues/$issueId/attachments', body: {
+      'fileName': fileName,
+      'fileData': fileData,
+      'fileType': fileType,
+      'fileSize': fileSize,
     });
+    return AttachmentModel.fromJson(data);
+  }
+
+  Future<void> deleteAttachment(int issueId, int attachmentId) async {
+    await _send('DELETE', '/issues/$issueId/attachments/$attachmentId');
+  }
+
+  // Sub-tasks
+  Future<List<IssueModel>> getSubtasks(int issueId) async {
+    return _list(await _send('GET', '/issues/$issueId/subtasks'), IssueModel.fromJson);
+  }
+
+  Future<IssueModel> createSubtask(int parentIssueId, {
+    required String title,
+    int? assigneeId,
+    String priority = 'MEDIUM',
+    int? estimatedMinutes,
+  }) async {
+    final body = <String, dynamic>{
+      'title': title.trim(),
+      'priority': priority,
+    };
+    if (assigneeId != null) body['assigneeId'] = assigneeId;
+    if (estimatedMinutes != null) body['estimatedMinutes'] = estimatedMinutes;
+
+    final data = await _send('POST', '/issues/$parentIssueId/subtasks', body: body);
     return IssueModel.fromJson(data);
   }
 

@@ -1,6 +1,7 @@
 /// A single time log on an issue.
 class TimeEntryModel {
   final int id;
+  final int userId;
   final String userName;
   final int durationMinutes;
   final String workDescription;
@@ -8,6 +9,7 @@ class TimeEntryModel {
 
   TimeEntryModel({
     required this.id,
+    this.userId = 0,
     this.userName = '',
     this.durationMinutes = 0,
     this.workDescription = '',
@@ -17,6 +19,7 @@ class TimeEntryModel {
   factory TimeEntryModel.fromJson(Map<String, dynamic> json) {
     return TimeEntryModel(
       id: json['id'] ?? 0,
+      userId: json['userId'] ?? 0,
       userName: json['userName'] ?? '',
       durationMinutes: json['durationMinutes'] ?? 0,
       workDescription: json['workDescription'] ?? '',

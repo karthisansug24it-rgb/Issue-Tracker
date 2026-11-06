@@ -4,6 +4,8 @@ class IssueModel {
   final int projectId;
   final String projectName;
   final String projectKey;
+  final int? parentIssueId;
+  final String? parentIssueKey;
   final String title;
   final String description;
   final String type; // BUG, TASK, FEATURE, INCIDENT, SUPPORT_REQUEST
@@ -17,10 +19,15 @@ class IssueModel {
   final int estimatedMinutes;
   int actualMinutes;
 
+  int attachmentCount;
+  int subtaskCount;
+  int subtaskDoneCount;
+
   // Capabilities computed by the server for the signed-in user
   List<String> allowedTransitions;
   bool canAssign;
   bool canLogTime;
+  bool canManage;
 
   IssueModel({
     required this.id,
@@ -28,6 +35,8 @@ class IssueModel {
     required this.projectId,
     this.projectName = '',
     this.projectKey = '',
+    this.parentIssueId,
+    this.parentIssueKey,
     required this.title,
     this.description = '',
     this.type = 'TASK',
@@ -40,9 +49,13 @@ class IssueModel {
     this.dueDate,
     this.estimatedMinutes = 0,
     this.actualMinutes = 0,
+    this.attachmentCount = 0,
+    this.subtaskCount = 0,
+    this.subtaskDoneCount = 0,
     this.allowedTransitions = const [],
     this.canAssign = false,
     this.canLogTime = false,
+    this.canManage = false,
   });
 
   factory IssueModel.fromJson(Map<String, dynamic> json) {
@@ -52,6 +65,8 @@ class IssueModel {
       projectId: json['projectId'] ?? 0,
       projectName: json['projectName'] ?? '',
       projectKey: json['projectKey'] ?? '',
+      parentIssueId: json['parentIssueId'],
+      parentIssueKey: json['parentIssueKey'],
       title: json['title'] ?? '',
       description: json['description'] ?? '',
       type: json['type'] ?? 'TASK',
@@ -64,11 +79,15 @@ class IssueModel {
       dueDate: json['dueDate'],
       estimatedMinutes: json['estimatedMinutes'] ?? 0,
       actualMinutes: json['actualMinutes'] ?? 0,
+      attachmentCount: json['attachmentCount'] ?? 0,
+      subtaskCount: json['subtaskCount'] ?? 0,
+      subtaskDoneCount: json['subtaskDoneCount'] ?? 0,
       allowedTransitions: json['allowedTransitions'] != null
           ? List<String>.from(json['allowedTransitions'])
           : const [],
       canAssign: json['canAssign'] ?? false,
       canLogTime: json['canLogTime'] ?? false,
+      canManage: json['canManage'] ?? false,
     );
   }
 
@@ -78,9 +97,13 @@ class IssueModel {
     assigneeId = other.assigneeId;
     assigneeName = other.assigneeName;
     actualMinutes = other.actualMinutes;
+    attachmentCount = other.attachmentCount;
+    subtaskCount = other.subtaskCount;
+    subtaskDoneCount = other.subtaskDoneCount;
     allowedTransitions = other.allowedTransitions;
     canAssign = other.canAssign;
     canLogTime = other.canLogTime;
+    canManage = other.canManage;
   }
 
   Map<String, dynamic> toJson() {
@@ -90,6 +113,8 @@ class IssueModel {
       'projectId': projectId,
       'projectName': projectName,
       'projectKey': projectKey,
+      'parentIssueId': parentIssueId,
+      'parentIssueKey': parentIssueKey,
       'title': title,
       'description': description,
       'type': type,
@@ -102,9 +127,13 @@ class IssueModel {
       'dueDate': dueDate,
       'estimatedMinutes': estimatedMinutes,
       'actualMinutes': actualMinutes,
+      'attachmentCount': attachmentCount,
+      'subtaskCount': subtaskCount,
+      'subtaskDoneCount': subtaskDoneCount,
       'allowedTransitions': allowedTransitions,
       'canAssign': canAssign,
       'canLogTime': canLogTime,
+      'canManage': canManage,
     };
   }
 }

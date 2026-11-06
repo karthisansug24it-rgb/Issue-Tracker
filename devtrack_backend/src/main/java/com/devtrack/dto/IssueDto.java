@@ -16,6 +16,8 @@ public class IssueDto {
     private Long projectId;
     private String projectName;
     private String projectKey;
+    private Long parentIssueId;
+    private String parentIssueKey;
     private String title;
     private String description;
     private IssueType type;
@@ -32,6 +34,10 @@ public class IssueDto {
     private LocalDateTime updatedAt;
     private LocalDateTime resolvedAt;
 
+    private int attachmentCount;
+    private int subtaskCount;
+    private int subtaskDoneCount;
+
     public IssueDto() {}
 
     public static IssueDto fromEntity(Issue issue) {
@@ -39,6 +45,7 @@ public class IssueDto {
         dto.setId(issue.getId());
         dto.setIssueKey(issue.getIssueKey());
         dto.setProjectId(issue.getProjectId());
+        dto.setParentIssueId(issue.getParentIssueId());
         dto.setTitle(issue.getTitle());
         dto.setDescription(issue.getDescription());
         dto.setType(issue.getType());
@@ -69,6 +76,12 @@ public class IssueDto {
 
     public String getProjectKey() { return projectKey; }
     public void setProjectKey(String projectKey) { this.projectKey = projectKey; }
+
+    public Long getParentIssueId() { return parentIssueId; }
+    public void setParentIssueId(Long parentIssueId) { this.parentIssueId = parentIssueId; }
+
+    public String getParentIssueKey() { return parentIssueKey; }
+    public void setParentIssueKey(String parentIssueKey) { this.parentIssueKey = parentIssueKey; }
 
     public String getTitle() { return title; }
     public void setTitle(String title) { this.title = title; }
@@ -114,6 +127,15 @@ public class IssueDto {
 
     public LocalDateTime getResolvedAt() { return resolvedAt; }
     public void setResolvedAt(LocalDateTime resolvedAt) { this.resolvedAt = resolvedAt; }
+
+    public int getAttachmentCount() { return attachmentCount; }
+    public void setAttachmentCount(int attachmentCount) { this.attachmentCount = attachmentCount; }
+
+    public int getSubtaskCount() { return subtaskCount; }
+    public void setSubtaskCount(int subtaskCount) { this.subtaskCount = subtaskCount; }
+
+    public int getSubtaskDoneCount() { return subtaskDoneCount; }
+    public void setSubtaskDoneCount(int subtaskDoneCount) { this.subtaskDoneCount = subtaskDoneCount; }
 
     // Per-user capabilities, computed by the server so the client never guesses the rules
     private List<IssueStatus> allowedTransitions = new ArrayList<>();

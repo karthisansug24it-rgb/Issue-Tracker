@@ -9,10 +9,14 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 
 public class CreateIssueRequest {
     @NotNull(message = "Project ID is required")
     private Long projectId;
+
+    private Long parentIssueId;
 
     @NotBlank(message = "Title is required")
     @Size(max = 200, message = "Title must be at most 200 characters")
@@ -33,10 +37,16 @@ public class CreateIssueRequest {
     @Max(value = 100000, message = "Estimate is too large")
     private Integer estimatedMinutes;
 
+    private List<CreateAttachmentRequest> attachments = new ArrayList<>();
+    private List<CreateSubtaskRequest> subtasks = new ArrayList<>();
+
     public CreateIssueRequest() {}
 
     public Long getProjectId() { return projectId; }
     public void setProjectId(Long projectId) { this.projectId = projectId; }
+
+    public Long getParentIssueId() { return parentIssueId; }
+    public void setParentIssueId(Long parentIssueId) { this.parentIssueId = parentIssueId; }
 
     public String getTitle() { return title; }
     public void setTitle(String title) { this.title = title; }
@@ -58,4 +68,10 @@ public class CreateIssueRequest {
 
     public Integer getEstimatedMinutes() { return estimatedMinutes; }
     public void setEstimatedMinutes(Integer estimatedMinutes) { this.estimatedMinutes = estimatedMinutes; }
+
+    public List<CreateAttachmentRequest> getAttachments() { return attachments; }
+    public void setAttachments(List<CreateAttachmentRequest> attachments) { this.attachments = attachments != null ? attachments : new ArrayList<>(); }
+
+    public List<CreateSubtaskRequest> getSubtasks() { return subtasks; }
+    public void setSubtasks(List<CreateSubtaskRequest> subtasks) { this.subtasks = subtasks != null ? subtasks : new ArrayList<>(); }
 }

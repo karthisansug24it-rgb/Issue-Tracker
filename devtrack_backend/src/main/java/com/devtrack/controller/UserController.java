@@ -22,16 +22,15 @@ public class UserController {
         this.userService = userService;
     }
 
-    // The staff directory (with emails) is for Team Lead and above.
-    // Employees pick assignees from GET /projects/{id}/members instead.
+    // The staff directory is viewable by all authenticated users.
     @GetMapping
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'TEAM_LEAD')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE')")
     public ResponseEntity<List<UserDto>> getAllUsers(@AuthenticationPrincipal User viewer) {
         return ResponseEntity.ok(userService.getAllUsers(viewer));
     }
 
     @GetMapping("/active")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'TEAM_LEAD')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE')")
     public ResponseEntity<List<UserDto>> getActiveUsers(@AuthenticationPrincipal User viewer) {
         return ResponseEntity.ok(userService.getActiveUsers(viewer));
     }

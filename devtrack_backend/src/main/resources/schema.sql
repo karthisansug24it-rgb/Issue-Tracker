@@ -192,6 +192,23 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 );
 
 -- --------------------------------------------------------------------
+-- 13. ISSUE ATTACHMENTS TABLE
+-- --------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS issue_attachments (
+    id BIGSERIAL PRIMARY KEY,
+    issue_id BIGINT NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
+    file_name VARCHAR(255) NOT NULL,
+    file_type VARCHAR(100),
+    file_size BIGINT,
+    file_data TEXT,
+    uploader_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    uploader_name VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_attachments_issue ON issue_attachments(issue_id);
+
+-- --------------------------------------------------------------------
 -- SCHEMA MIGRATIONS (Ensure columns and FKs exist if tables pre-dated departments)
 -- --------------------------------------------------------------------
 ALTER TABLE users ADD COLUMN IF NOT EXISTS department_id BIGINT;

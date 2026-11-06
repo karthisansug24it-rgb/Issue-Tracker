@@ -86,6 +86,38 @@ public class IssueController {
         return ResponseEntity.ok(issueService.logTime(id, request.getDurationMinutes(), request.getWorkDescription(), user));
     }
 
+    @GetMapping("/{id}/attachments")
+    public ResponseEntity<List<AttachmentDto>> getAttachments(@PathVariable Long id, @AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(issueService.getIssueAttachments(id, user));
+    }
+
+    @PostMapping("/{id}/attachments")
+    public ResponseEntity<AttachmentDto> addAttachment(@PathVariable Long id,
+                                                       @Valid @RequestBody CreateAttachmentRequest request,
+                                                       @AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(issueService.addAttachment(id, request, user));
+    }
+
+    @DeleteMapping("/{id}/attachments/{attachmentId}")
+    public ResponseEntity<Void> deleteAttachment(@PathVariable Long id,
+                                                 @PathVariable Long attachmentId,
+                                                 @AuthenticationPrincipal User user) {
+        issueService.deleteAttachment(id, attachmentId, user);
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/{id}/subtasks")
+    public ResponseEntity<List<IssueDto>> getSubtasks(@PathVariable Long id, @AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(issueService.getSubtasks(id, user));
+    }
+
+    @PostMapping("/{id}/subtasks")
+    public ResponseEntity<IssueDto> createSubtask(@PathVariable Long id,
+                                                  @Valid @RequestBody CreateSubtaskRequest request,
+                                                  @AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(issueService.createSubtask(id, request, user));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteIssue(@PathVariable Long id, @AuthenticationPrincipal User user) {
         issueService.deleteIssue(id, user);

@@ -1,7 +1,6 @@
 package com.devtrack.service;
 
-import com.devtrack.dto.CreateIssueRequest;
-import com.devtrack.dto.IssueDto;
+import com.devtrack.dto.*;
 import com.devtrack.exception.BadRequestException;
 import com.devtrack.exception.ForbiddenException;
 import com.devtrack.exception.NotFoundException;
@@ -32,6 +31,7 @@ public class IssueService {
     private final IssueCommentRepository commentRepository;
     private final TimeEntryRepository timeEntryRepository;
     private final NotificationRepository notificationRepository;
+    private final IssueAttachmentRepository attachmentRepository;
     private final AccessService accessService;
 
     public IssueService(IssueRepository issueRepository,
@@ -41,6 +41,7 @@ public class IssueService {
                         IssueCommentRepository commentRepository,
                         TimeEntryRepository timeEntryRepository,
                         NotificationRepository notificationRepository,
+                        IssueAttachmentRepository attachmentRepository,
                         AccessService accessService) {
         this.issueRepository = issueRepository;
         this.projectRepository = projectRepository;
@@ -49,6 +50,7 @@ public class IssueService {
         this.commentRepository = commentRepository;
         this.timeEntryRepository = timeEntryRepository;
         this.notificationRepository = notificationRepository;
+        this.attachmentRepository = attachmentRepository;
         this.accessService = accessService;
     }
 
@@ -105,6 +107,20 @@ public class IssueService {
         return timeEntryRepository.findByIssueIdOrderByLoggedAtDesc(issueId);
     }
 
+    @Transactional(readOnly = true)
+    public List<AttachmentDto> getIssueAttachments(Long issueId, User user) {
+        requireViewableIssue(issueId, user);
+        return attachmentRepository.findByIssueIdOrderByCreatedAtAsc(issueId).stream()
+                .map(AttachmentDto::fromEntity)
+                .collect(Collectors.toList());
+    }
+
+    public List<IssueDto> getSubtasks(Long issueId, User user) {
+        requireViewableIssue(issueId, user);
+        List<Issue> subtasks = issueRepository.findByParentIssueId(issueId);
+        return mapAll(subtasks, user);
+    }
+
     // ---------------------------------------------------------------- commands
 
     @Transactional
@@ -138,6 +154,14 @@ public class IssueService {
                 request.getEstimatedMinutes()
         );
 
+        if (request.getParentIssueId() != null) {
+            Issue parent = requireIssue(request.getParentIssueId());
+            if (!parent.getProjectId().equals(project.getId())) {
+                throw new BadRequestException("Parent issue must belong to the same project.");
+            }
+            issue.setParentIssueId(parent.getId());
+        }
+
         Issue saved = issueRepository.save(issue);
 
         historyRepository.save(new IssueHistory(saved.getId(), reporter.getId(), reporter.getFullName(),
@@ -148,7 +172,129 @@ public class IssueService {
                     reporter.getFullName() + " assigned you " + saved.getTitle(), saved, project, "ASSIGNMENT");
         }
 
+        // Save attachments if provided
+        if (request.getAttachments() != null && !request.getAttachments().isEmpty()) {
+            for (CreateAttachmentRequest att : request.getAttachments()) {
+                if (att.getFileName() != null && !att.getFileName().isBlank() && att.getFileData() != null) {
+                    attachmentRepository.save(new IssueAttachment(
+                            saved.getId(),
+                            att.getFileName().trim(),
+                            att.getFileType(),
+                            att.getFileSize(),
+                            att.getFileData(),
+                            reporter.getId(),
+                            reporter.getFullName()
+                    ));
+                }
+            }
+        }
+
+        // Save sub-tasks if provided
+        if (request.getSubtasks() != null && !request.getSubtasks().isEmpty()) {
+            for (CreateSubtaskRequest subtaskReq : request.getSubtasks()) {
+                if (subtaskReq.getTitle() != null && !subtaskReq.getTitle().isBlank()) {
+                    Long subAssignee = subtaskReq.getAssigneeId();
+                    if (subAssignee != null) {
+                        requireAssignableUser(project, subAssignee);
+                    }
+                    Issue subtask = new Issue(
+                            nextIssueKey(project),
+                            project.getId(),
+                            subtaskReq.getTitle().trim(),
+                            null,
+                            IssueType.TASK,
+                            subtaskReq.getPriority() != null ? subtaskReq.getPriority() : IssuePriority.MEDIUM,
+                            subAssignee != null ? IssueStatus.ASSIGNED : IssueStatus.OPEN,
+                            reporter.getId(),
+                            subAssignee,
+                            null,
+                            subtaskReq.getEstimatedMinutes()
+                    );
+                    subtask.setParentIssueId(saved.getId());
+                    Issue savedSub = issueRepository.save(subtask);
+                    historyRepository.save(new IssueHistory(savedSub.getId(), reporter.getId(), reporter.getFullName(),
+                            "CREATED", null, savedSub.getStatus().name()));
+                }
+            }
+        }
+
         return mapToIssueDto(saved, project, reporter);
+    }
+
+    @Transactional
+    public AttachmentDto addAttachment(Long issueId, CreateAttachmentRequest request, User user) {
+        Issue issue = requireIssue(issueId);
+        Project project = accessService.requireViewableProject(user, issue.getProjectId());
+
+        IssueAttachment attachment = new IssueAttachment(
+                issue.getId(),
+                request.getFileName().trim(),
+                request.getFileType(),
+                request.getFileSize(),
+                request.getFileData(),
+                user.getId(),
+                user.getFullName()
+        );
+        IssueAttachment saved = attachmentRepository.save(attachment);
+
+        historyRepository.save(new IssueHistory(issue.getId(), user.getId(), user.getFullName(),
+                "ATTACHMENT", null, "Attached " + saved.getFileName()));
+
+        return AttachmentDto.fromEntity(saved);
+    }
+
+    @Transactional
+    public void deleteAttachment(Long issueId, Long attachmentId, User actor) {
+        IssueAttachment attachment = attachmentRepository.findById(attachmentId)
+                .orElseThrow(() -> new NotFoundException("Attachment not found: " + attachmentId));
+        if (!attachment.getIssueId().equals(issueId)) {
+            throw new BadRequestException("Attachment does not belong to issue " + issueId);
+        }
+        Issue issue = requireIssue(issueId);
+        Project project = accessService.requireProject(issue.getProjectId());
+        ProjectAccess access = accessService.projectAccess(actor, project);
+
+        boolean canDelete = accessService.isAdmin(actor) || access.canManage() || attachment.getUploaderId().equals(actor.getId());
+        if (!canDelete) {
+            throw new ForbiddenException("You can only delete your own attachments or attachments in projects you manage.");
+        }
+        attachmentRepository.delete(attachment);
+
+        historyRepository.save(new IssueHistory(issue.getId(), actor.getId(), actor.getFullName(),
+                "ATTACHMENT", "Removed " + attachment.getFileName(), null));
+    }
+
+    @Transactional
+    public IssueDto createSubtask(Long parentIssueId, CreateSubtaskRequest request, User reporter) {
+        Issue parent = requireIssue(parentIssueId);
+        Project project = projectRepository.findByIdForUpdate(parent.getProjectId())
+                .orElseThrow(() -> new NotFoundException("Project not found: " + parent.getProjectId()));
+        accessService.requireViewableProject(reporter, project.getId());
+
+        Long subAssignee = request.getAssigneeId();
+        if (subAssignee != null) {
+            requireAssignableUser(project, subAssignee);
+        }
+
+        Issue subtask = new Issue(
+                nextIssueKey(project),
+                project.getId(),
+                request.getTitle().trim(),
+                null,
+                IssueType.TASK,
+                request.getPriority() != null ? request.getPriority() : IssuePriority.MEDIUM,
+                subAssignee != null ? IssueStatus.ASSIGNED : IssueStatus.OPEN,
+                reporter.getId(),
+                subAssignee,
+                null,
+                request.getEstimatedMinutes()
+        );
+        subtask.setParentIssueId(parent.getId());
+        Issue savedSub = issueRepository.save(subtask);
+        historyRepository.save(new IssueHistory(savedSub.getId(), reporter.getId(), reporter.getFullName(),
+                "CREATED", null, savedSub.getStatus().name()));
+
+        return mapToIssueDto(savedSub, project, reporter);
     }
 
     @Transactional
@@ -386,6 +532,14 @@ public class IssueService {
         if (issue.getAssigneeId() != null) {
             dto.setAssigneeName(names.get(issue.getAssigneeId()));
         }
+        if (issue.getParentIssueId() != null) {
+            issueRepository.findById(issue.getParentIssueId()).ifPresent(p -> dto.setParentIssueKey(p.getIssueKey()));
+        }
+        dto.setAttachmentCount((int) attachmentRepository.countByIssueId(issue.getId()));
+        List<Issue> subtasks = issueRepository.findByParentIssueId(issue.getId());
+        dto.setSubtaskCount(subtasks.size());
+        dto.setSubtaskDoneCount((int) subtasks.stream().filter(s -> s.getStatus().isDone()).count());
+
         if (project != null) {
             dto.setProjectName(project.getName());
             dto.setProjectKey(project.getProjectKey());
@@ -420,6 +574,7 @@ public class IssueService {
             issueRepository.save(child);
         }
 
+        attachmentRepository.deleteByIssueId(id);
         commentRepository.deleteByIssueId(id);
         historyRepository.deleteByIssueId(id);
         timeEntryRepository.deleteByIssueId(id);

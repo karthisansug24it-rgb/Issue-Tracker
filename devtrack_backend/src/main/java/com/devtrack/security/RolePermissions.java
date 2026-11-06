@@ -37,12 +37,12 @@ public final class RolePermissions {
                 perms.add("TEAM_REPORTS_VIEW");
                 // fall through
             case TEAM_LEAD:
-                perms.add("TEAM_VIEW");
-                perms.add("USER_DIRECTORY_VIEW");
                 perms.add("ISSUE_ASSIGN");
                 perms.add("ISSUE_REVIEW");
                 // fall through
             case EMPLOYEE:
+                perms.add("TEAM_VIEW");
+                perms.add("USER_DIRECTORY_VIEW");
                 perms.add("MY_ISSUES_VIEW");
                 perms.add("ISSUE_CREATE");
                 perms.add("ISSUE_UPDATE_STATUS");
